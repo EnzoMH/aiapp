@@ -21,6 +21,7 @@ from sqlalchemy.orm import Session
 
 # dbcon.py에서 필요한 것들을 가져옵니다
 from dbcon import engine, SessionLocal, Base, get_db, test_connection
+from docpro import process_file, clean_text
 
 # .env 파일 로드
 load_dotenv()
@@ -44,7 +45,7 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 templates = Jinja2Templates(directory="static")
 
 # 매니저 초기화
-ACCESS_TOKEN_EXPIRE_MINUTES = 60
+ACCESS_TOKEN_EXPIRE_MINUTES = 30
 ws_manager = WebSocketManager()
 file_handler = FileHandler()
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="api/login")
@@ -135,8 +136,46 @@ async def websocket_endpoint(websocket: WebSocket, token: str = None):
 # 파일 업로드 엔드포인트
 @app.post("/mainupload")
 async def upload_file(file: UploadFile = File(...)):
+    # 파일 유효성 검사
     file_handler.validate_file(file.filename, 0)
-    return {"filename": file.filename, "status": "success"}
+    
+    try:
+        # docpro를 사용하여 파일에서 텍스트 추출
+        extracted_text = await process_file(file)
+        
+        # 텍스트 정리
+        cleaned_text = clean_text(extracted_text)
+        
+        # 텍스트 인코딩 문제 처리
+        try:
+            # UTF-8로 인코딩 확인
+            cleaned_text.encode('utf-8')
+        except UnicodeEncodeError:
+            # 인코딩 문제가 있는 경우 대체
+            cleaned_text = cleaned_text.encode('utf-8', errors='replace').decode('utf-8')
+        
+        # 텍스트 길이 계산
+        text_length = len(cleaned_text)
+        
+        # 미리보기용 텍스트 (너무 길면 잘라서 반환)
+        preview_text = cleaned_text[:1000] + "..." if text_length > 1000 else cleaned_text
+        
+        return {
+            "filename": file.filename,
+            "status": "success",
+            "text_length": text_length,
+            "preview": preview_text,
+            "full_text": cleaned_text  # 전체 텍스트 반환 (필요에 따라 제거 가능)
+        }
+    except HTTPException as e:
+        # 이미 HTTPException이면 그대로 전달
+        raise e
+    except Exception as e:
+        # 기타 예외는 500 오류로 변환
+        raise HTTPException(
+            status_code=500,
+            detail=f"파일 처리 중 오류 발생: {str(e)}"
+        )
 
 # 애플리케이션 시작 시 데이터베이스 연결 테스트
 @app.on_event("startup")
