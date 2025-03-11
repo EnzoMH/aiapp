@@ -1,0 +1,1257 @@
+<!DOCTYPE html>
+<html lang="ko">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Chat Interface</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css" rel="stylesheet">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700&display=swap');
+
+        body {
+            font-family: 'Noto Sans KR', sans-serif;
+            background-color: #f9f9f9;
+            margin: 0;
+            padding: 0;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .navbar {
+            background-color: #ffffff;
+            border-bottom: 1px solid #e0e0e0;
+            padding: 1rem;
+            position: sticky;
+            /* 추가 */
+            top: 0;
+            /* 추가 */
+            z-index: 1000;
+            /* 추가 */
+        }
+
+        .model-selector {
+            display: flex;
+            align-items: center;
+            gap: 20px;
+            justify-content: center;
+        }
+
+        .model-button {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            padding: 0;
+            border: 2px solid transparent;
+            background: none;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .model-button img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            border-radius: 50%;
+        }
+
+        .model-button.active {
+            border-color: #007bff;
+            box-shadow: 0 0 0 2px rgba(0, 123, 255, 0.2);
+        }
+
+        .model-button:hover {
+            transform: scale(1.1);
+        }
+
+        .model-label {
+            font-size: 12px;
+            text-align: center;
+            margin-top: 4px;
+            color: #666;
+        }
+
+        .chat-container {
+            flex-grow: 1;
+            display: flex;
+            flex-direction: column;
+            max-width: 1000px;
+            margin: 0 auto;
+            padding: 20px;
+            width: 100%;
+        }
+
+        .chat-messages {
+            flex-grow: 1;
+            overflow-y: auto;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        .message {
+            display: flex;
+            gap: 20px;
+            padding: 10px;
+            border-radius: 8px;
+        }
+
+        .message.user {
+            background-color: #f7f7f8;
+        }
+
+        .message.assistant {
+            background-color: #ffffff;
+        }
+
+        .message-avatar {
+            width: 30px;
+            height: 30px;
+            border-radius: 50%;
+            /* 원형으로 변경 */
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+            /* 이미지가 영역을 벗어나지 않도록 */
+        }
+
+        .message-avatar img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            /* 이미지 비율 유지 */
+        }
+
+        .message-content {
+            flex-grow: 1.5;
+            white-space: pre-wrap;
+            position: relative;
+            /* 복사 버튼 위치를 위해 필요 */
+            padding: 10px;
+            /* 내용과 테두리 사이 여백 */
+            line-height: 1.6;
+            /* 가독성 향상 */
+        }
+
+        .message-content strong {
+            font-weight: 600;
+            color: #1a73e8;
+        }
+
+        .message-content em {
+            font-style: italic;
+            color: #5f6368;
+        }
+
+        .message-content ul,
+        .message-content ol {
+            padding-left: 1.5em;
+            margin: 0.5em 0;
+        }
+
+        .message-content ul li,
+        .message-content ol li {
+            margin: 0.3em 0;
+            line-height: 1.6;
+        }
+
+        .message-content h1,
+        .message-content h2,
+        .message-content h3 {
+            margin-top: 1em;
+            margin-bottom: 0.5em;
+            color: #202124;
+        }
+
+        .message-content ul li::marker {
+            color: #1a73e8;
+        }
+
+        .message-content th,
+        .message-content td {
+            border: 1px solid #e0e0e0;
+            padding: 12px 16px;
+            text-align: left;
+        }
+
+        .message-content th {
+            background-color: #f8f9fa;
+        }
+
+        .claude-specific-content {
+            line-height: 1.8;
+            font-size: 1rem;
+            color: #2D3748;
+        }
+
+        .gemini-specific-content {
+            line-height: 1.7;
+            font-size: 1rem;
+            color: #1A202C;
+        }
+
+        .meta-specific-content {
+            line-height: 1.6;
+            font-size: 1rem;
+            color: #2D3748;
+        }
+
+        .message-actions {
+            position: absolute;
+            top: 0.5rem;
+            right: 0.5rem;
+            opacity: 0;
+            transition: opacity 0.2s ease;
+        }
+
+        .message:hover .message-actions {
+            opacity: 1;
+        }
+
+        .message-content pre {
+            background-color: #f6f8fa;
+            border-radius: 6px;
+            padding: 16px;
+            overflow-x: auto;
+            margin: 8px 0;
+        }
+
+        .message-content code {
+            font-family: 'Monaco', 'Consolas', monospace;
+            font-size: 0.9em;
+            background-color: rgba(175, 184, 193, 0.2);
+            padding: 0.2em 0.4em;
+            border-radius: 3px;
+        }
+
+        .message-content pre code {
+            background-color: transparent;
+            padding: 0;
+        }
+
+        .message-content blockquote {
+            border-left: 4px solid #1a73e8;
+            margin: 0;
+            padding-left: 16px;
+            color: #5f6368;
+        }
+
+        .message-content table {
+            border-collapse: collapse;
+            margin: 1em 0;
+            width: 100%;
+            background-color: #ffffff;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+        }
+
+        .message-content th {
+            background-color: #f8f9fa;
+            font-weight: 600;
+            border: 1px solid #e0e0e0;
+            padding: 12px 16px;
+            text-align: left;
+        }
+
+        .message-content td {
+            border: 1px solid #e0e0e0;
+            padding: 12px 16px;
+            text-align: left;
+        }
+
+        .message-content tr:nth-child(even) {
+            background-color: #f8f9fa;
+        }
+
+        .message-content a {
+            color: #1a73e8;
+            text-decoration: none;
+            border-bottom: 1px solid transparent;
+            transition: border-color 0.2s ease;
+        }
+
+        .message-content a:hover {
+            border-bottom-color: #1a73e8;
+        }
+
+        .gemini-content {
+            font-family: 'Noto Sans KR', sans-serif;
+            line-height: 1.6;
+            color: #333;
+        }
+
+        .gemini-section-header {
+            font-size: 1.2em;
+            font-weight: 600;
+            color: #1a73e8;
+            margin: 1.5em 0 1em;
+        }
+
+        .gemini-section {
+            margin-bottom: 1.5em;
+        }
+
+        .gemini-bullet-point {
+            position: relative;
+            padding-left: 1.5em;
+            margin: 0.8em 0;
+        }
+
+        .gemini-bullet-point::before {
+            content: "•";
+            position: absolute;
+            left: 0.5em;
+            color: #1a73e8;
+        }
+
+        .gemini-bold {
+            color: #1a73e8;
+            font-weight: 600;
+        }
+
+        .gemini-paragraph {
+            margin: 1em 0;
+        }
+
+        .gemini-text {
+            margin: 0.5em 0;
+        }
+
+        /* Gemini 스타일 */
+        .gemini-paragraph strong {
+            color: #1a73e8;
+            font-weight: 600;
+        }
+
+        /* Gemini 스타일 개선 */
+        .gemini-content {
+            position: relative;
+        }
+
+        .gemini-document {
+            font-family: 'Noto Sans KR', sans-serif;
+            line-height: 1.6;
+            color: #333;
+            padding: 1rem;
+            font-size: 16px;
+            /* 기본 폰트 사이즈 설정 */
+        }
+
+        .gemini-main-header {
+            font-size: 1.4em;
+            /* 22.4px */
+            font-weight: 600;
+            color: #1a73e8;
+            margin: 1.5em 0 0.5em;
+            padding-bottom: 0.3em;
+            border-bottom: 2px solid #e8f0fe;
+        }
+
+        .gemini-sub-section {
+            margin: 0.8em 0 0.8em 1.5em;
+            position: relative;
+            font-size: 1em;
+            /* 16px (기본 사이즈 유지) */
+        }
+
+        .gemini-sub-header {
+            color: #1a73e8;
+            font-weight: 600;
+            margin-right: 0.5em;
+        }
+
+        .gemini-content-text {
+            color: #333;
+        }
+
+        .gemini-paragraph {
+            margin: 1em 0;
+            line-height: 1.8;
+            font-size: 1em;
+            /* 16px (기본 사이즈 유지) */
+        }
+
+        /* 별표로 시작하는 리스트 스타일 */
+        .gemini-list-item {
+            position: relative;
+            padding-left: 1.5em;
+            margin-bottom: 1em;
+        }
+
+        .gemini-list-item::before {
+            content: "*";
+            position: absolute;
+            left: 0;
+            color: #1a73e8;
+        }
+
+        /* 테이블 스타일 개선 */
+        .gemini-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 1.5em 0;
+            background-color: #ffffff;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+
+        .gemini-table td {
+            padding: 12px 16px;
+            border: 1px solid #e0e0e0;
+            line-height: 1.6;
+        }
+
+        /* 강조 스타일 */
+        .gemini-content strong {
+            color: #1a73e8;
+            font-weight: 600;
+            background-color: rgba(26, 115, 232, 0.1);
+            padding: 0.1em 0.3em;
+            border-radius: 3px;
+        }
+
+        /* Claude 스타일 */
+        .claude-numbered-list {
+            counter-reset: claude-number;
+            margin: 1rem 0;
+        }
+
+        .claude-numbered-item {
+            position: relative;
+            padding-left: 2.5em;
+            margin-bottom: 1rem;
+        }
+
+        .claude-numbered-item::before {
+            counter-increment: claude-number;
+            content: counter(claude-number) ".";
+            position: absolute;
+            left: 0;
+            color: #1a73e8;
+        }
+
+        .claude-bullet-list {
+            margin: 1rem 0 1rem 1.5rem;
+        }
+
+        .claude-bullet-item {
+            position: relative;
+            padding-left: 1.5em;
+            margin-bottom: 0.5em;
+        }
+
+        .claude-bullet-item::before {
+            content: "•";
+            position: absolute;
+            left: 0;
+            color: #1a73e8;
+        }
+
+        /* Claude 스타일 개선 */
+        .claude-content {
+            padding: 1rem;
+            line-height: 1.8;
+            background-color: #f8f9fa;
+            /* 배경색 추가 */
+            border-radius: 8px;
+            /* 둥근 모서리 */
+            margin: 0.5rem 0;
+            /* 여백 조정 */
+        }
+
+        /* 리스트 스타일 개선 */
+        .claude-list {
+            margin: 1em 0;
+            padding-left: 0;
+        }
+
+        .claude-list-item {
+            list-style: none;
+            position: relative;
+            padding-left: 1.5em;
+            margin-bottom: 0.8em;
+        }
+
+        .claude-numbered-item::before {
+            content: counter(claude-item) ".";
+            counter-increment: claude-item;
+            position: absolute;
+            left: 0;
+            color: #1a73e8;
+            font-weight: 500;
+        }
+
+        .claude-bullet-item::before {
+            content: "•";
+            position: absolute;
+            left: 0.5em;
+            color: #1a73e8;
+        }
+
+        /* 줄바꿈 간격 조정 */
+        .claude-paragraph {
+            margin-bottom: 1.2em;
+        }
+
+        /* Meta 스타일 */
+        .meta-content {
+            line-height: 1.7;
+        }
+
+        /* 테이블 스타일 */
+        .meta-table {
+            width: 100%;
+            margin: 1.5em 0;
+            border-collapse: separate;
+            border-spacing: 0;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+        }
+
+        .meta-table th,
+        .meta-table td {
+            border: 1px solid #e0e0e0;
+            padding: 14px 16px;
+        }
+
+        .meta-table th {
+            background-color: #f8f9fa;
+            font-weight: 600;
+        }
+
+        /* 리스트 간격 조정 */
+        .meta-list {
+            margin: 1em 0;
+            padding-left: 1.2em;
+        }
+
+        .meta-list-item {
+            margin-bottom: 0.7em;
+        }
+
+        .markdown-table td,
+        .markdown-table th {
+            padding: 12px 16px;
+            border: 1px solid #e0e0e0;
+            text-align: left;
+        }
+
+        .markdown-table tr:nth-child(even) {
+            background-color: #f8f9fa;
+        }
+
+        .message-content img {
+            max-width: 100%;
+            height: auto;
+            border-radius: 4px;
+            margin: 8px 0;
+        }
+
+        .copy-button {
+            background: none;
+            border: none;
+            padding: 0.5rem;
+            cursor: pointer;
+            transition: color 0.2s ease;
+        }
+
+        .copy-button:hover {
+            color: #1a73e8;
+        }
+
+        .input-area {
+            background-color: #ffffff;
+            border-top: 1px solid #e0e0e0;
+            padding: 20px;
+            position: sticky;
+            bottom: 0;
+        }
+
+        .message-input:disabled {
+            background-color: #f5f5f5;
+            cursor: not-allowed;
+        }
+
+        .input-container {
+            display: flex;
+            gap: 10px;
+            max-width: 1000px;
+            margin: 0 auto;
+        }
+
+        .message-input {
+            flex-grow: 1;
+            padding: 12px;
+            border: 1px solid #e0e0e0;
+            border-radius: 8px;
+            resize: none;
+            min-height: 52px;
+            max-height: 200px;
+            font-family: inherit;
+        }
+
+        .send-button {
+            padding: 12px 24px;
+            background-color: #007bff;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+        }
+
+        .model-button-container.active .model-label {
+            color: #007bff;
+            font-weight: 500;
+        }
+
+        .send-button:disabled {
+            background-color: #cccccc;
+            cursor: not-allowed;
+            opacity: 0.7;
+        }
+
+        .model-button-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 4px;
+            transition: all 0.3s ease;
+        }
+
+        .connection-status {
+            position: absolute;
+            right: 20px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 12px;
+        }
+
+        .connection-status span {
+            font-size: 14px;
+        }
+
+        .connection-status .offline {
+            color: #dc3545;
+        }
+
+        .connection-status .online {
+            color: #28a745;
+        }
+
+        /* 스크롤바 스타일링 */
+        .chat-messages::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        .chat-messages::-webkit-scrollbar-track {
+            background: #f1f1f1;
+            border-radius: 4px;
+        }
+
+        .chat-messages::-webkit-scrollbar-thumb {
+            background: #c1c1c1;
+            border-radius: 4px;
+        }
+
+        .chat-messages::-webkit-scrollbar-thumb:hover {
+            background: #a8a8a8;
+        }
+
+        /* 메시지 전환 애니메이션 */
+        .message {
+            opacity: 0;
+            transform: translateY(10px);
+            animation: messageAppear 0.3s ease forwards;
+        }
+
+        @keyframes messageAppear {
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <nav class="navbar">
+        <div class="connection-status">
+            <span id="connection-indicator" class="offline">●</span>
+            <span id="connection-text">연결 중...</span>
+        </div>
+        <!-- 기존 코드의 model-selector 부분을 다음과 같이 수정 -->
+        <div class="model-selector">
+            <div class="model-button-container">
+                <button class="model-button active" data-model="meta">
+                    <img src="/static/image/meta.png" alt="Meta LLM">
+                </button>
+                <div class="model-label">Local LLM</div>
+            </div>
+            <div class="model-button-container">
+                <button class="model-button" data-model="claude">
+                    <img src="/static/image/claude.png" alt="Claude">
+                </button>
+                <div class="model-label">Claude-3 Sonnet</div>
+            </div>
+            <div class="model-button-container">
+                <button class="model-button" data-model="gemini">
+                    <img src="/static/image/gemini.png" alt="Gemini">
+                </button>
+                <div class="model-label">Gemini-1.5 Flash</div>
+            </div>
+        </div>
+    </nav>
+
+    <div class="chat-container">
+        <div class="chat-messages" id="chat-messages">
+            <!-- Messages will be inserted here -->
+        </div>
+    </div>
+
+    <div class="input-area">
+        <div class="input-container">
+            <textarea class="message-input" id="message-input" placeholder="메시지를 입력하세요..." rows="1"></textarea>
+            <button class="send-button" id="send-button">
+                <i class="fas fa-paper-plane"></i>
+            </button>
+        </div>
+    </div>
+
+    <script>
+        // 초기 상태 설정
+        document.addEventListener('DOMContentLoaded', () => {
+            const connectionIndicator = document.getElementById('connection-indicator');
+            const connectionText = document.getElementById('connection-text');
+            connectionIndicator.className = 'offline';
+            connectionText.textContent = '연결 중...';
+            messageInput.disabled = true;
+            sendButton.disabled = true;
+        });
+
+        const chatMessages = document.getElementById('chat-messages');
+        const messageInput = document.getElementById('message-input');
+        const sendButton = document.getElementById('send-button');
+        const modelButtons = document.querySelectorAll('.model-button');
+        let currentModel = 'meta';
+
+        let currentAssistantMessage = null;
+        const ws = new WebSocket('ws://localhost:8005/ws');
+
+        // 메시지 버퍼링 추가
+        let messageBuffer = '';
+
+        const TYPING_DELAY = 20; // 타이핑 딜레이 (밀리초)
+        const CHUNK_SIZE = 3; // 한 번에 표시할 문자 수
+
+        function handleStreamingMessage(message) {
+            if (!currentAssistantMessage) {
+                currentAssistantMessage = createMessageElement('assistant', message.model);
+                chatMessages.appendChild(currentAssistantMessage);
+                messageBuffer = '';
+            }
+
+            const contentElement = currentAssistantMessage.querySelector('.message-content');
+            if (!contentElement) return;
+
+            switch (message.model) {
+                case 'gemini':
+                    messageBuffer += message.content;
+                    // processGeminiMarkdown 함수를 사용하여 변환
+                    contentElement.innerHTML = processGeminiMarkdown(messageBuffer);
+                    break;
+                case 'claude':
+                    messageBuffer += message.content;
+                    contentElement.innerHTML = messageBuffer;
+                    break;
+                case 'meta':
+                    const words = message.content.split(' ');
+                    typeWords(words, contentElement);
+                    break;
+            }
+
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+        }
+
+        function handleGeminiMessage(message, contentElement) {
+            messageBuffer += message.content;
+            contentElement.innerHTML = processGeminiMarkdown(messageBuffer);
+        }
+
+        function handleClaudeMessage(message, contentElement) {
+            messageBuffer += message.content;
+            contentElement.innerHTML = messageBuffer;
+        }
+
+        function handleMetaMessage(message, contentElement) {
+            const words = message.content.split(' ');
+            typeWords(words, contentElement);
+        }
+
+        function typeWords(words, contentElement, index = 0) {
+            if (index >= words.length) return;
+
+            const word = words[index];
+            const needsSpace = index > 0;
+
+            messageBuffer += (needsSpace ? ' ' : '') + word;
+            contentElement.textContent = messageBuffer;
+
+            setTimeout(() => typeWords(words, contentElement, index + 1), TYPING_DELAY);
+        }
+
+        function finalizeAssistantMessage() {
+            if (currentAssistantMessage) {
+                const contentElement = currentAssistantMessage.querySelector('.message-content');
+                if (contentElement) {
+                    const model = currentAssistantMessage.classList.contains('gemini-content') ? 'gemini' :
+                        currentAssistantMessage.classList.contains('claude-content') ? 'claude' : 'meta';
+
+                    switch (model) {
+                        case 'gemini':
+                            contentElement.innerHTML = processGeminiMarkdown(messageBuffer);
+                            break;
+                        default:
+                            contentElement.innerHTML = messageBuffer;
+                    }
+                    messageBuffer = '';
+                    addCopyButton(currentAssistantMessage);
+                    currentAssistantMessage = null;
+                }
+            }
+        }
+
+        function createMessageElement(type, model = 'meta') {
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `message ${type}`;
+
+            // 모델별 클래스 추가
+            if (type === 'assistant') {
+                messageDiv.classList.add(`${model}-content`);
+            }
+
+            // 아바타 섹션
+            const avatar = document.createElement('div');
+            avatar.className = 'message-avatar';
+
+            if (type === 'assistant') {
+                // 모델별 이미지 설정
+                const img = document.createElement('img');
+                img.style.width = '100%';
+                img.style.height = '100%';
+                img.style.borderRadius = '50%';
+
+                switch (model) {
+                    case 'claude':
+                        img.src = '/static/image/claude.png';
+                        img.alt = 'Claude';
+                        break;
+                    case 'gemini':
+                        img.src = '/static/image/gemini.png';
+                        img.alt = 'Gemini';
+                        break;
+                    case 'meta':
+                        img.src = '/static/image/meta.png';
+                        img.alt = 'Meta LLM';
+                        break;
+                }
+                avatar.appendChild(img);
+            } else {
+                // 사용자 아바타는 기존 아이콘 유지
+                avatar.innerHTML = `<i class="fas fa-user" style="color: #5f6368"></i>`;
+            }
+
+            // 컨텐츠 섹션
+            const content = document.createElement('div');
+            content.className = 'message-content';
+
+            // 모델별 추가 스타일 클래스
+            if (type === 'assistant') {
+                content.classList.add(`${model}-specific-content`);
+            }
+
+            // 컴포넌트 조립
+            messageDiv.appendChild(avatar);
+            messageDiv.appendChild(content);
+
+            // 복사 버튼 추가 (어시스턴트 메시지만)
+            if (type === 'assistant') {
+                const actions = document.createElement('div');
+                actions.className = 'message-actions';
+
+                const copyButton = document.createElement('button');
+                copyButton.className = 'copy-button';
+                copyButton.innerHTML = '<i class="fas fa-copy"></i>';
+                copyButton.onclick = () => {
+                    const textContent = content.innerText;
+                    navigator.clipboard.writeText(textContent)
+                        .then(() => {
+                            copyButton.innerHTML = '<i class="fas fa-check"></i>';
+                            setTimeout(() => {
+                                copyButton.innerHTML = '<i class="fas fa-copy"></i>';
+                            }, 2000);
+                        })
+                        .catch(err => console.error('Failed to copy:', err));
+                };
+
+                actions.appendChild(copyButton);
+                content.appendChild(actions);
+            }
+
+            return messageDiv;
+        }
+
+        function addCopyButton(messageElement) {
+            const actions = document.createElement('div');
+            actions.className = 'message-actions';
+
+            const copyButton = document.createElement('button');
+            copyButton.className = 'copy-button';
+            copyButton.innerHTML = '<i class="fas fa-copy"></i>';
+            copyButton.onclick = () => {
+                // HTML 태그를 제외한 순수 텍스트만 복사
+                const content = messageElement.querySelector('.message-content').innerText;
+                navigator.clipboard.writeText(content)
+                    .then(() => {
+                        copyButton.innerHTML = '<i class="fas fa-check"></i>';
+                        setTimeout(() => {
+                            copyButton.innerHTML = '<i class="fas fa-copy"></i>';
+                        }, 2000);
+                    });
+            };
+
+            actions.appendChild(copyButton);
+            messageElement.querySelector('.message-content').appendChild(actions);
+        }
+
+        // WebSocket event handlers
+        ws.onopen = () => {
+            console.log('Connected to server');
+            sendButton.disabled = false;
+            messageInput.disabled = false;  // 입력창 활성화
+            // 연결 상태 업데이트
+            connectionIndicator.className = 'online';
+            connectionText.textContent = '연결됨';
+        };
+
+        ws.onclose = () => {
+            console.log('Disconnected from server');
+            sendButton.disabled = true;
+            messageInput.disabled = true;  // 입력창 비활성화
+            // 연결 상태 업데이트
+            connectionIndicator.className = 'offline';
+            connectionText.textContent = '연결 끊김';
+        };
+
+        ws.onerror = (error) => {
+            console.error('WebSocket error:', error);
+            sendButton.disabled = true;
+            messageInput.disabled = true;  // 입력창 비활성화
+            // 연결 상태 업데이트
+            connectionIndicator.className = 'offline';
+            connectionText.textContent = '연결 오류';
+        };
+
+        function processGeminiMarkdown(text) {
+            if (!text) return '';
+
+            let processed = text;
+
+            // 1. 대주제 처리 ("**내용:**" 패턴)
+            processed = processed.replace(/\*\*([^*:]+):\*\*/g, (match, content) => {
+                return `<h2 class="gemini-main-header">${content}:</h2>`;
+            });
+
+            // 2. 소주제 처리 ("* **내용:**" 패턴)
+            processed = processed.replace(/\*\s+\*\*([^*:]+):\*\*/g, (match, content) => {
+                return `<div class="gemini-sub-section">
+                    <strong class="gemini-sub-header">${content}:</strong>
+                </div>`;
+            });
+
+            // 3. 소주제 내용 처리 (소주제 이후의 텍스트)
+            const lines = processed.split('\n');
+            processed = lines.map(line => {
+                if (line.includes('gemini-sub-header')) {
+                    // 소주제 줄의 나머지 내용 처리
+                    const [header, ...rest] = line.split('</strong>');
+                    const content = rest.join('</strong>').replace('</div>', '');
+                    return `${header}</strong><span class="gemini-content-text">${content}</span></div>`;
+                }
+                return line;
+            }).join('\n');
+
+            // 4. 일반 텍스트 문단 처리
+            const paragraphs = processed.split('\n\n');
+            processed = paragraphs.map(para => {
+                if (!para.startsWith('<h2') && !para.startsWith('<div') && para.trim()) {
+                    return `<p class="gemini-paragraph">${para}</p>`;
+                }
+                return para;
+            }).join('\n');
+
+            // 5. 전체 내용 래핑
+            return `<div class="gemini-document">${processed}</div>`;
+        }
+
+        // Send message function with model selection
+        // 메시지 전송 함수에도 적용
+        function sendMessage() {
+            const message = messageInput.value.trim();
+            if (message && ws.readyState === WebSocket.OPEN) {
+                // 사용자 메시지 생성 및 표시
+                const messageElement = createMessageElement('user');
+                messageElement.querySelector('.message-content').textContent = message;
+                chatMessages.appendChild(messageElement);
+
+                // 서버로 메시지 전송
+                ws.send(JSON.stringify({
+                    content: message,
+                    model: currentModel  // 현재 선택된 모델
+                }));
+
+                messageInput.value = '';
+                chatMessages.scrollTop = chatMessages.scrollHeight;
+                sendButton.disabled = true;
+                messageInput.disabled = true;
+            }
+        }
+        // Handle incoming messages with enhanced error handling
+        ws.onmessage = (event) => {
+            try {
+                const message = JSON.parse(event.data);
+
+                if (message.type === 'assistant') {
+                    if (message.streaming) {
+                        handleStreamingMessage(message);
+                    } else if (message.isFullResponse) {
+                        // 전체 응답 처리
+                        finalizeAssistantMessage();
+                    } else {
+                        // 스트리밍 완료
+                        finalizeAssistantMessage();
+                        enableInputs();
+                    }
+                }
+            } catch (error) {
+                console.error('Error processing message:', error);
+                enableInputs();
+            }
+        };
+        // function safeParse(text) {
+        //     try {
+        //         return JSON.parse(text);
+        //     } catch (e) {
+        //         console.error('JSON Parse Error:', e);
+        //         return null;
+        //     }
+        // }
+
+        // function safeHTML(text) {
+        //     return text
+        //         .replace(/&/g, '&amp;')
+        //         .replace(/</g, '&lt;')
+        //         .replace(/>/g, '&gt;')
+        //         .replace(/"/g, '&quot;')
+        //         .replace(/'/g, '&#039;');
+        // }
+
+        function enableInputs() {
+            sendButton.disabled = false;
+            messageInput.disabled = false;
+        }
+
+        // Model selection handling with visual feedback
+        modelButtons.forEach(button => {
+            button.addEventListener('click', () => {
+                // Remove active class from all buttons
+                modelButtons.forEach(btn => {
+                    btn.classList.remove('active');
+                    btn.closest('.model-button-container').classList.remove('active');
+                });
+
+                // Add active class to clicked button
+                button.classList.add('active');
+                button.closest('.model-button-container').classList.add('active');
+
+                // Update current model
+                currentModel = button.dataset.model;
+
+                // Visual feedback
+                const modelLabel = button.parentElement.querySelector('.model-label');
+                modelLabel.style.fontWeight = 'bold';
+                setTimeout(() => {
+                    modelLabel.style.fontWeight = 'normal';
+                }, 300);
+            });
+        });
+
+        // Event listeners
+        sendButton.addEventListener('click', sendMessage);
+
+        messageInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                sendMessage();
+            }
+        });
+
+        messageInput.addEventListener('input', () => {
+            messageInput.style.height = 'auto';
+            const maxHeight = 200; // px 단위
+            const scrollHeight = messageInput.scrollHeight;
+            messageInput.style.height = Math.min(scrollHeight, maxHeight) + 'px';
+            if (scrollHeight > maxHeight) {
+                messageInput.style.overflowY = 'auto';
+            } else {
+                messageInput.style.overflowY = 'hidden';
+            }
+        });
+
+        window.addEventListener('beforeunload', () => {
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                ws.close();
+            }
+        });
+
+        // 마크다운 텍스트 전처리 함수
+        // function processMarkdown(text) {
+        //     if (!text) return '';
+
+        //     // 모델별 전처리
+        //     let processed = text;
+
+        //     const model = currentAssistantMessage?.classList.contains('claude-content') ? 'claude' :
+        //         currentAssistantMessage?.classList.contains('gemini-content') ? 'gemini' : 'meta';
+
+        //     switch (currentModel) {
+        //         case 'gemini':
+        //             // Gemini 특화 처리
+        //             processed = processGeminiMarkdown(processed);
+        //             break;
+        //         case 'claude':
+        //             // Claude 특화 처리
+        //             processed = processClaudeMarkdown(processed);
+        //             break;
+        //         // meta는 기본 처리만 사용
+        //     }
+
+        //     // 1. HTML 이스케이프 처리
+        //     processed = processed
+        //         .replace(/&/g, '&amp;')
+        //         .replace(/</g, '&lt;')
+        //         .replace(/>/g, '&gt;');
+
+        //     // 2. 코드 블록 처리 (```로 시작하는 블록)
+        //     processed = processed.replace(/```(\w*)\n([\s\S]*?)```/g, (match, lang, code) => {
+        //         return `<pre><code class="language-${lang}">${code.trim()}</code></pre>`;
+        //     });
+
+        //     // 3. 인라인 코드 처리
+        //     processed = processed.replace(/`([^`]+)`/g, '<code>$1</code>');
+
+        //     // 4. 헤더 처리 (### 부터 시작)
+        //     processed = processed.replace(/^### (.*?)$/gm, '<h3>$1</h3>');
+        //     processed = processed.replace(/^## (.*?)$/gm, '<h2>$1</h2>');
+        //     processed = processed.replace(/^# (.*?)$/gm, '<h1>$1</h1>');
+
+        //     // 5. 볼드체 처리 (**text**)
+        //     processed = processed.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+
+        //     // 6. 이탤릭체 처리 (*text*)
+        //     processed = processed.replace(/\*([^\*]+)\*/g, '<em>$1</em>');
+
+        //     // 7. 테이블 처리
+        //     processed = processed.replace(/\|(.+)\|/g, (match, content) => {
+        //         const cells = content.trim().split('|').map(cell => cell.trim());
+        //         if (cells[0].includes('---')) {
+        //             // 테이블 헤더 구분선 무시
+        //             return '';
+        //         }
+        //         return `<tr>${cells.map(cell => `<td>${cell}</td>`).join('')}</tr>`;
+        //     });
+        //     // 테이블 래핑
+        //     processed = processed.replace(/<tr>.*?<\/tr>/g, match => {
+        //         if (match.includes('<td>')) {
+        //             return `<table class="${currentModel}-table">${match}</table>`;
+        //         }
+        //         return match;
+        //     });
+
+        //     // 8. 순서 있는 리스트 처리
+        //     processed = processed.replace(/^\d+\.\s+(.*)$/gm, '<li>$1</li>');
+        //     processed = processed.replace(/(<li>.*<\/li>\n?)+/g, '<ol>$&</ol>');
+
+        //     // 9. 순서 없는 리스트 처리
+        //     processed = processed.replace(/^[\-\*]\s+(.*)$/gm, '<li>$1</li>');
+        //     processed = processed.replace(/(?<!<\/ol>)(<li>.*?<\/li>\n?)+/g, '<ul>$&</ul>');
+
+        //     // 10. 인용구 처리
+        //     processed = processed.replace(/^>\s+(.*)$/gm, '<blockquote>$1</blockquote>');
+
+        //     // 11. 수평선 처리
+        //     processed = processed.replace(/^---$/gm, '<hr>');
+
+        //     // 12. 줄바꿈 처리
+        //     processed = processed.replace(/\n\n/g, '</p><p>');
+        //     processed = processed.replace(/\n/g, '<br>');
+
+        //     // 13. 최종 래핑 (모델별 클래스 추가)
+        //     processed = `<div class="markdown-content ${currentModel}-content"><p>${processed}</p></div>`;
+
+        //     return processed;
+        // }
+
+        // function processGeminiMarkdown(text) {
+        //     if (!text) return '';
+
+        //     let processed = text;
+
+        //     // (1) '*' + 공백으로 시작하는 문단 처리
+        //     processed = processed.replace(/^\* (.*?)$/gm, (match, content) => {
+        //         return `<div class="gemini-paragraph">${content}</div>`;
+        //     });
+
+        //     // (2) Bold 처리 (**text**)
+        //     processed = processed.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+
+        //     // 연속된 gemini-paragraph를 하나의 섹션으로 그룹화
+        //     processed = processed.replace(/(<div class="gemini-paragraph">.*?<\/div>\n*)+/g,
+        //         '<section class="gemini-section">$&</section>');
+
+        //     return processed;
+        // }
+
+        // function processClaudeMarkdown(text) {
+        //     if (!text) return '';
+
+        //     let processed = text;
+
+        //     // 숫자 리스트 처리
+        //     processed = processed.replace(/^\d+\.\s+(.*?)$/gm, (match, content) => {
+        //         return `<div class="claude-numbered-item">${content}</div>`;
+        //     });
+
+        //     // 하이픈 리스트 처리
+        //     processed = processed.replace(/^-\s+(.*?)$/gm, (match, content) => {
+        //         return `<div class="claude-bullet-item">${content}</div>`;
+        //     });
+
+        //     // 그룹화
+        //     processed = processed.replace(/(<div class="claude-numbered-item">.*?<\/div>\n*)+/g,
+        //         '<section class="claude-numbered-list">$&</section>');
+        //     processed = processed.replace(/(<div class="claude-bullet-item">.*?<\/div>\n*)+/g,
+        //         '<section class="claude-bullet-list">$&</section>');
+
+        //     return processed;
+        // }
+
+    </script>
+</body>
+
+</html>

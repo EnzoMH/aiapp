@@ -1,0 +1,36 @@
+# 환경 변수 파일
+.env
+
+# 사용자 데이터
+users.json
+
+# 대용량 모델 파일
+llama-korean/
+*.gguf
+
+# 파이썬 캐시 파일
+__pycache__/
+*.py[cod]
+*$py.class
+
+# 가상 환경
+venv/
+env/
+ENV/
+
+# 로그 파일
+*.log
+
+# 데이터베이스 파일
+*.db
+*.sqlite3
+
+# IDE 설정 파일
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# 시스템 파일
+.DS_Store
+Thumbs.db

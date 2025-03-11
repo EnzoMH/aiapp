@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PROGEN - AI 어시스턴트</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="/static/css/style.css" rel="stylesheet">
+</head>
+<body class="bg-gray-50 h-screen flex flex-col overflow-hidden">
+    <!-- 헤더 -->
+    <header class="bg-white border-b border-gray-200 z-10">
+        <div class="container mx-auto px-4 py-3 flex justify-between items-center">
+            <div class="flex items-center gap-2">
+                <h1 class="text-xl font-bold text-gray-800">PROGEN</h1>
+                <span class="text-sm text-gray-500">AI 어시스턴트</span>
+            </div>
+            <div class="flex items-center gap-4">
+                <div id="model-selector" class="flex items-center bg-gray-100 p-1 rounded-lg">
+                    <button class="px-3 py-1.5 rounded-md text-sm font-medium model-btn active" data-model="meta">
+                        Meta
+                    </button>
+                    <button class="px-3 py-1.5 rounded-md text-sm font-medium model-btn" data-model="claude">
+                        Claude
+                    </button>
+                    <button class="px-3 py-1.5 rounded-md text-sm font-medium model-btn" data-model="gemini">
+                        Gemini
+                    </button>
+                </div>
+                <div class="flex items-center gap-2">
+                    <span id="userInfo" class="text-sm text-gray-600"></span>
+                    <button id="logoutBtn" class="text-sm px-3 py-1.5 bg-gray-100 hover:bg-gray-200 rounded-md">
+                        로그아웃
+                    </button>
+                </div>
+            </div>
+        </div>
+    </header>
+    
+    <!-- 메인 콘텐츠 -->
+    <main class="flex-grow flex overflow-hidden">
+        <!-- 사이드바 -->
+        <aside class="w-64 bg-white border-r border-gray-200 hidden md:block p-4 overflow-y-auto flex-shrink-0">
+            <div class="mb-6">
+                <button id="newChatBtn" class="w-full flex items-center justify-center gap-2 px-4 py-2 border border-gray-300 rounded-md hover:bg-gray-50">
+                    <i class="fas fa-plus"></i>
+                    <span>새 채팅</span>
+                </button>
+            </div>
+            
+            <div class="space-y-2">
+                <h3 class="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">기능</h3>
+                
+                <a href="/prop" class="flex items-center p-2 text-gray-700 hover:bg-gray-100 rounded-md">
+                    <i class="fas fa-file-alt mr-3 text-gray-500"></i>
+                    <span>새 제안서 작성</span>
+                </a>
+                
+                <a href="#" class="flex items-center p-2 text-gray-700 hover:bg-gray-100 rounded-md">
+                    <i class="fas fa-history mr-3 text-gray-500"></i>
+                    <span>대화 기록</span>
+                </a>
+                
+                <div id="adminSection" class="hidden mt-6">
+                    <h3 class="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">관리자</h3>
+                    <button id="getUsersBtn" class="flex items-center p-2 text-gray-700 hover:bg-gray-100 rounded-md w-full text-left">
+                        <i class="fas fa-users mr-3 text-gray-500"></i>
+                        <span>사용자 관리</span>
+                    </button>
+                </div>
+            </div>
+        </aside>
+        
+        <!-- 채팅 영역 -->
+        <div class="flex-grow flex flex-col relative bg-white">
+            <!-- 채팅 메시지 영역 -->
+            <div id="chat-messages" class="flex-grow overflow-y-auto p-4 space-y-6">
+                <div class="welcome-message text-center py-10">
+                    <h2 class="text-2xl font-bold text-gray-800 mb-3">AI 어시스턴트에 오신 것을 환영합니다</h2>
+                    <p class="text-gray-600 mb-6 max-w-md mx-auto">질문하거나 파일을 업로드하여 시작하세요</p>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4 max-w-2xl mx-auto">
+                        <div class="p-4 bg-white rounded-lg border border-gray-200 text-left">
+                            <h3 class="font-medium text-gray-800 mb-2">RFP 문서 분석</h3>
+                            <p class="text-sm text-gray-600">RFP 문서를 업로드하여 핵심 내용을 분석하고 통찰력을 얻으세요.</p>
+                        </div>
+                        <div class="p-4 bg-white rounded-lg border border-gray-200 text-left">
+                            <h3 class="font-medium text-gray-800 mb-2">제안서 작성 지원</h3>
+                            <p class="text-sm text-gray-600">AI가 제안서 작성을 도와 경쟁력 있는 내용을 구성하세요.</p>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- 메시지는 JavaScript로 동적 추가 -->
+            </div>
+            
+            <!-- 사용자 목록 패널 (관리자 전용) -->
+            <div id="usersList" class="absolute inset-0 bg-white p-4 overflow-y-auto hidden z-20">
+                <div class="flex justify-between items-center mb-4">
+                    <h3 class="text-lg font-semibold">사용자 목록</h3>
+                    <button id="closeUsersList" class="text-gray-500 hover:text-gray-700">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+                <div id="usersListContent">
+                    <!-- 사용자 목록은 JavaScript로 동적 추가 -->
+                </div>
+            </div>
+            
+            <!-- 입력 영역 -->
+            <div class="p-4 bg-white">
+                <div class="max-w-3xl mx-auto relative">
+                    <div class="flex items-center">
+                        <button id="uploadBtn" class="text-gray-500 hover:text-gray-700 p-2">
+                            <i class="fas fa-paperclip"></i>
+                        </button>
+                        <input type="file" id="fileInput" class="hidden" multiple accept=".pdf,.hwp,.hwpx,.doc,.docx">
+                        
+                        <div class="flex-grow relative">
+                            <textarea 
+                                id="messageInput" 
+                                rows="1" 
+                                class="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+                                placeholder="메시지를 입력하세요..."
+                            ></textarea>
+                        </div>
+                        
+                        <button id="sendBtn" class="ml-2 p-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50">
+                            <i class="fas fa-paper-plane"></i>
+                        </button>
+                    </div>
+                    
+                    <!-- 업로드된 파일 표시 영역 -->
+                    <div id="uploadedFiles" class="flex gap-2 mt-2 flex-wrap"></div>
+                </div>
+            </div>
+        </div>
+    </main>
+    
+    <script src="/static/js/home.js"></script>
+</body>
+</html>

@@ -1,0 +1,278 @@
+/* 기본 폰트 설정 */
+@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700&display=swap');
+
+* {
+    font-family: 'Noto Sans KR', sans-serif;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+    line-height: 1.5;
+    color: #333;
+    overflow: hidden; /* 페이지 레벨에서 스크롤 방지 */
+}
+
+/* 입력 필드 스타일 */
+input[type="text"],
+input[type="password"] {
+    border: 1px solid #d1d5db;
+    border-radius: 0.375rem;
+    padding: 0.5rem 0.75rem;
+    width: 100%;
+    outline: none;
+    transition: border-color 0.15s ease-in-out, box-shadow 0.15s ease-in-out;
+}
+
+input[type="text"]:focus,
+input[type="password"]:focus {
+    border-color: #6366f1;
+    box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+}
+
+/* 버튼 스타일 */
+button {
+    cursor: pointer;
+    transition: all 0.2s ease-in-out;
+}
+
+button:hover {
+    transform: translateY(-1px);
+}
+
+button:active {
+    transform: translateY(1px);
+}
+
+/* 애니메이션 */
+.fade-in {
+    animation: fadeIn 0.5s ease-in-out;
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* 모델 선택 버튼 */
+.model-btn {
+    transition: all 0.2s;
+}
+
+.model-btn.active {
+    background-color: #3b82f6;
+    color: white;
+}
+
+/* 채팅 메시지 스타일 */
+.message {
+    padding: 1rem;
+    border-radius: 0.5rem;
+    margin-bottom: 1rem;
+}
+
+.message.user {
+    margin-left: auto;
+    margin-right: 1rem;
+    background-color: #3b82f6;
+    color: white;
+    max-width: 80%;
+}
+
+.message.assistant {
+    margin-left: 1rem;
+    margin-right: auto;
+    background-color: #f9fafb;
+    border: 1px solid #e5e7eb;
+    max-width: 80%;
+}
+
+.message.system {
+    background-color: #f3f4f6;
+    border: 1px solid #e5e7eb;
+    width: 100%;
+    max-width: 44rem; /* 약 700px */
+    margin: 0 auto;
+}
+
+/* 채팅 컨테이너 스타일 */
+#chat-messages {
+    display: flex;
+    flex-direction: column;
+    padding: 1rem;
+    overflow-y: auto;
+    scroll-behavior: smooth;
+}
+
+#chat-messages .welcome-message {
+    max-width: 44rem;
+    margin: 0 auto;
+    width: 100%;
+}
+
+/* 드래그 오버 스타일 */
+.drag-over {
+    background-color: rgba(59, 130, 246, 0.1);
+}
+
+/* 로딩 스피너 */
+.spinner {
+    width: 24px;
+    height: 24px;
+    border: 3px solid rgba(99, 102, 241, 0.3);
+    border-radius: 50%;
+    border-top-color: #6366f1;
+    animation: spin 1s ease-in-out infinite;
+}
+
+@keyframes spin {
+    0% {
+        transform: rotate(0deg);
+    }
+    100% {
+        transform: rotate(360deg);
+    }
+}
+
+/* 코드 블록 스타일 (마크다운 렌더링용) */
+pre {
+    background-color: #1e1e1e;
+    color: #d4d4d4;
+    padding: 1rem;
+    border-radius: 0.5rem;
+    overflow-x: auto;
+    max-width: 100%;
+}
+
+code {
+    font-family: 'Fira Code', Consolas, Monaco, 'Andale Mono', 'Ubuntu Mono', monospace;
+}
+
+/* 업로드된 파일 스타일 */
+.uploaded-file {
+    display: flex;
+    align-items: center;
+    padding: 0.5rem;
+    background-color: #f3f4f6;
+    border-radius: 0.25rem;
+    font-size: 0.875rem;
+}
+
+.uploaded-file .file-name {
+    margin-left: 0.5rem;
+    max-width: 150px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.uploaded-file .remove-file {
+    margin-left: 0.5rem;
+    color: #6b7280;
+    cursor: pointer;
+}
+
+.uploaded-file .remove-file:hover {
+    color: #ef4444;
+}
+
+/* 애니메이션 효과 */
+@keyframes pulse {
+    0%, 100% {
+        opacity: 1;
+    }
+    50% {
+        opacity: 0.5;
+    }
+}
+
+.animate-pulse {
+    animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+/* 스크롤바 스타일 */
+::-webkit-scrollbar {
+    width: 8px;
+}
+
+::-webkit-scrollbar-track {
+    background: #f1f1f1;
+}
+
+::-webkit-scrollbar-thumb {
+    background: #c0c0c0;
+    border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: #a0a0a0;
+}
+
+/* 메시지 입력창 자동 리사이징 */
+textarea {
+    overflow: hidden;
+    min-height: 38px;
+    max-height: 200px;
+}
+
+/* 토스트 알림 스타일 */
+.toast-container {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    z-index: 1000;
+}
+
+.toast {
+    padding: 1rem;
+    margin-top: 0.5rem;
+    border-radius: 0.375rem;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+    animation: fadeIn 0.3s, fadeOut 0.3s 2.7s;
+}
+
+.toast.success {
+    background-color: #10b981;
+    color: white;
+}
+
+.toast.error {
+    background-color: #ef4444;
+    color: white;
+}
+
+.toast.info {
+    background-color: #3b82f6;
+    color: white;
+}
+
+@keyframes fadeOut {
+    from { opacity: 1; transform: translateY(0); }
+    to { opacity: 0; transform: translateY(-20px); }
+}
+
+.fade-out {
+    animation: fadeOut 0.3s forwards;
+}
+
+/* 메시지 컨테이너 중앙 정렬 */
+.message-container {
+    max-width: 44rem; /* 약 700px */
+    margin: 0 auto;
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+}
+
+/* 반응형 조정 */
+@media (max-width: 768px) {
+    .message.user, .message.assistant {
+        max-width: 90%;
+    }
+}
