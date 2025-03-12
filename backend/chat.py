@@ -10,7 +10,7 @@ from backend.utils.chat.memory import MemoryManager
 from backend.utils.chat.ai_models import AIModelManager, AIModel
 from backend.utils.chat.handlers import MessageHandler
 
-from dbcon import SessionLocal, Session, Message as DBMessage, Session as DBSession
+from backend.utils.db import SessionLocal, DBSession, Message as DBMessage
 
 # 로깅 설정
 logger = logging.getLogger(__name__)

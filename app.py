@@ -13,7 +13,7 @@ from dotenv import load_dotenv
 import jwt
 
 # login utils import, 로그인 유틸 가져오기
-from backend.login import LoginUtils, auth_handler, UserRole
+from backend.login import LoginUtils, UserRole
 # prop utils import, 문서 유틸 가져오기
 from backend.prop import process_file, clean_text
 # chat utils import, 채팅 유틸 가져오기
@@ -35,6 +35,11 @@ from backend.dbm import UserManager, SessionManager, MessageManager, MemoryManag
 
 # .env 파일 로드
 load_dotenv()
+
+
+# JWT 설정
+JWT_SECRET_KEY = os.getenv("JWT_SECRET_KEY")
+ALGORITHM = "HS256"
 
 chat_manager = ChatManager()
 message_handler = MessageHandler(chat_manager)
