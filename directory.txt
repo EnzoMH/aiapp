@@ -14,13 +14,11 @@ PROGEN/
 │
 ├── backend/                     # 백엔드 코어 디렉토리
 │   ├── __init__.py 
-│   ├── agent.py/                # utils/agent/ 클래스 총집합 파일, app.py에서 활용  
-│   ├── crawl.py/                # utils/crawl/ 클래스 총집합 파일, app.py에서 활용  
+│   ├── crawl.py/                # utils/crawl/ 클래스 총집합 파일, app.py에서 활용
+│   ├── chat.py/                 # 현재 비어있음, app.py에서 활용
+│   ├── db.py/                   # 현재 비어있음, app.py에서 활용    
 │   ├── prop.py/                 # utils/prop/ 클래스 총집합 파일, app.py에서 활용  
 │   ├── login.py               # 로그인/인증 관련 유틸리티 (신규 추가)
-│   ├── chat.py                # 채팅 관련 유틸리티 (신규 추가)
-│   ├── db.py                  # MongoDB 연결 및 조작
-│   ├── dbtest.py              # 데이터베이스 테스트
 │   └── utils/                 # 유틸리티 함수 디렉토리
 │       ├── __init__.py        
 │       ├── agent/             # AI 에이전트 관련 파일
@@ -35,6 +33,8 @@ PROGEN/
 │           └── pg.py          # 제안서 생성 함수. ProposalGenerator
 │
 ├── .env                        # 환경 변수 설정
+├── app.py                      # FastAPI 메인 애플리케이션
+├── chat.py                # 채팅 관련 유틸리티 (신규 추가)
 ├── app.py                      # FastAPI 메인 애플리케이션
 ├── directory.txt               # 디렉토리 구조 문서
 ├── requirements.txt            # 프로젝트 의존성 목록

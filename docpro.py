@@ -229,6 +229,74 @@ def process_doc(content: bytes) -> str:
             os.remove(temp_path)
         except Exception as e:
             logger.warning(f"임시 파일 삭제 실패: {str(e)}")
+            
+def process_excel(content: bytes) -> str:
+    """Excel 파일 처리"""
+    logger.info("Excel 파일 처리 시작")
+
+    if not PANDAS_AVAILABLE:
+        raise ImportError("Excel 처리를 위한 pandas 라이브러리가 필요합니다")
+
+    try:
+        # 바이트 스트림으로 읽기
+        excel_stream = io.BytesIO(content)
+        
+        # pandas로 모든 시트 읽기
+        all_sheets = pd.read_excel(excel_stream, sheet_name=None)
+        
+        # 각 시트의 내용을 텍스트로 변환
+        text_parts = []
+        
+        for sheet_name, df in all_sheets.items():
+            # 시트 이름 추가
+            text_parts.append(f"[시트: {sheet_name}]")
+            
+            # 빈 데이터프레임 확인
+            if df.empty:
+                text_parts.append("(빈 시트)")
+                continue
+            
+            # 헤더 추가
+            headers = " | ".join(str(col) for col in df.columns)
+            text_parts.append(headers)
+            text_parts.append("-" * len(headers))
+            
+            # 행 데이터 추가
+            for _, row in df.iterrows():
+                row_text = " | ".join(str(cell) if not pd.isna(cell) else "" for cell in row)
+                text_parts.append(row_text)
+            
+            # 시트 구분자 추가
+            text_parts.append("\n")
+        
+        return "\n".join(text_parts)
+    except Exception as e:
+        logger.error(f"Excel 처리 실패: {str(e)}")
+        
+        # pandas 실패 시 openpyxl 직접 사용 시도
+        try:
+            logger.info("openpyxl로 대체 시도")
+            import openpyxl
+            
+            workbook = openpyxl.load_workbook(excel_stream, data_only=True)
+            
+            text_parts = []
+            for sheet_name in workbook.sheetnames:
+                sheet = workbook[sheet_name]
+                
+                text_parts.append(f"[시트: {sheet_name}]")
+                
+                for row in sheet.rows:
+                    row_text = " | ".join(str(cell.value) if cell.value is not None else "" for cell in row)
+                    if row_text.strip():
+                        text_parts.append(row_text)
+                
+                text_parts.append("\n")
+            
+            return "\n".join(text_parts)
+        except Exception as sub_e:
+            logger.error(f"openpyxl 대체 처리도 실패: {str(sub_e)}")
+            raise ValueError(f"Excel 파일 처리 실패: {str(e)}")
 
 def clean_text(text: str) -> str:
     """추출된 텍스트 정리"""
