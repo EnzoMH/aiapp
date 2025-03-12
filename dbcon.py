@@ -13,15 +13,6 @@ load_dotenv()
 
 # 환경 변수에서 데이터베이스 연결 URL 가져오기
 PSQL_URL = os.getenv("PSQL_URL")
-if not PSQL_URL:
-    # 환경 변수가 없는 경우 기본값 설정 (개발 환경용)
-    DB_USER = "postgres"
-    DB_PASSWORD = quote_plus("Smh213417!")
-    DB_HOST = "localhost"
-    DB_PORT = "5432"
-    DB_NAME = "progen"
-    PSQL_URL = f"postgresql://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
-
 # Engine 생성
 engine = create_engine(
     PSQL_URL,

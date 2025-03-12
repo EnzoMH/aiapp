@@ -74,6 +74,10 @@ async def root(request: Request):
 async def home(request: Request):
     return templates.TemplateResponse("home.html", {"request": request})
 
+@app.get("/prop", response_class=HTMLResponse)
+async def prop(request: Request):
+    return templates.TemplateResponse("prop.html", {"request": request})
+
 @app.post("/api/login")
 async def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
     user = auth_handler.authenticate_user(form_data.username, form_data.password, db)
