@@ -27,10 +27,16 @@ PROGEN/
 │       ├── crawl/             # 크롤러 관련 파일
 │       │   ├── __init__.py
 │       │   └── crawl.py       # 크롤링 관련 함수
-│       └── prop/
+│       ├── prop/
+│       │   ├── __init__.py
+│       │   ├── dc.py          # 문서 처리 함수, DocumentProcessor
+│       │   └── pg.py          # 제안서 생성 함수. ProposalGenerator
+│       └── chat/              # 채팅 관련 유틸리티
 │           ├── __init__.py
-│           ├── dc.py          # 문서 처리 함수, DocumentProcessor
-│           └── pg.py          # 제안서 생성 함수. ProposalGenerator
+│           ├── models.py      # 메시지, 세션 등 데이터 모델
+│           ├── memory.py      # 메모리 관리 관련 클래스
+│           ├── ai_models.py   # AI 모델 관리 클래스
+│           └── handlers.py    # 메시지 처리 핸들러
 │
 ├── .env                        # 환경 변수 설정
 ├── app.py                      # FastAPI 메인 애플리케이션

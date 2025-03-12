@@ -1,12 +1,38 @@
-fastapi 
-uvicorn 
-python-jose[cryptography] 
+# 웹 프레임워크
+fastapi
+uvicorn
 python-multipart
+python-jose[cryptography]
+
+# 환경 변수 및 설정
 python-dotenv
+colorama
+
+# 데이터베이스
+sqlalchemy
+psycopg2-binary
+passlib
+
+# AI 모델
+anthropic
+google-generativeai
+llama-cpp-python
+transformers
+
+# 문서 처리
+PyPDF2
+langchain-teddynote
+pandas
+pymupdf
+python-docx
+
+# 웹 크롤링 (필요한 경우)
 selenium
 chromedriver
 chromedriver_installer
-motor==3.7.0
-pymongo==4.11.1
-dnspython
+
+# HTTP 클라이언트
+httpx
+
+# JWT 인증
 PyJWT

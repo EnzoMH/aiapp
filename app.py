@@ -74,7 +74,7 @@ async def root(request: Request):
 async def home(request: Request):
     return templates.TemplateResponse("home.html", {"request": request})
 
-@app.get("/prop", response_class=HTMLResponse)
+@app.get("/prop", response_class=HTMLResponse) # 현재 html파일은 없음 
 async def prop(request: Request):
     return templates.TemplateResponse("prop.html", {"request": request})
 
