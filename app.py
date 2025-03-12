@@ -12,10 +12,11 @@ import os
 from dotenv import load_dotenv
 import jwt
 
-from backend.utils.agent.ai import WebSocketManager, FileHandler
 from backend.login import LoginUtils, auth_handler, UserRole
-# 수정된 임포트
+from backend.prop import process_file, clean_text
 from backend.chat import ChatManager, ChatSession
+# 수정된 임포트
+from backend.utils.agent.ai import WebSocketManager, FileHandler
 from backend.utils.chat.models import ChatMessage, MessageRole
 from backend.utils.chat.ai_models import AIModel
 from backend.utils.chat.handlers import MessageHandler
@@ -25,7 +26,7 @@ from sqlalchemy.orm import Session
 
 # dbcon.py에서 필요한 것들 가져오기
 from dbcon import engine, SessionLocal, Base, get_db, test_connection
-from docpro import process_file, clean_text
+
 
 # .env 파일 로드
 load_dotenv()
