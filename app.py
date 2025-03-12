@@ -12,21 +12,26 @@ import os
 from dotenv import load_dotenv
 import jwt
 
+# login utils import, 로그인 유틸 가져오기
 from backend.login import LoginUtils, auth_handler, UserRole
+# prop utils import, 문서 유틸 가져오기
 from backend.prop import process_file, clean_text
+# chat utils import, 채팅 유틸 가져오기
 from backend.chat import ChatManager, ChatSession
-# 수정된 임포트
+# Agent utils import, 에이전트 유틸 가져오기
 from backend.utils.agent.ai import WebSocketManager, FileHandler
+# chat utils import, 채팅 유틸 가져오기
 from backend.utils.chat.models import ChatMessage, MessageRole
+# chat utils import, 채팅 유틸 가져오기
 from backend.utils.chat.ai_models import AIModel
+# chat utils import, 채팅 유틸 가져오기
 from backend.utils.chat.handlers import MessageHandler
-
-# SQLAlchemy의 Session 클래스 가져오기
+# Session class of SQLAlchemy import, 세션 클래스 가져오기
 from sqlalchemy.orm import Session
 
-# dbcon.py에서 필요한 것들 가져오기
-from dbcon import engine, SessionLocal, Base, get_db, test_connection
-
+# DB uils function import, DB 유틸 함수 가져오기
+from backend.utils.db import engine, SessionLocal, Base, get_db, test_connection
+from backend.dbm import UserManager, SessionManager, MessageManager, MemoryManager
 
 # .env 파일 로드
 load_dotenv()
@@ -81,7 +86,7 @@ async def prop(request: Request):
 
 @app.post("/api/login")
 async def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
-    user = auth_handler.authenticate_user(form_data.username, form_data.password, db)
+    user = UserManager.authenticate_user(db, form_data.username, form_data.password)
     if not user:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -96,12 +101,13 @@ async def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = 
 async def get_me(current_user: dict = Depends(get_current_user)):
     return current_user
 
+# 수정된 코드
 @app.get("/api/admin/users")
 async def get_all_users(
     current_role: str = Depends(require_role([UserRole.ADMIN])),
     db: Session = Depends(get_db)
 ):
-    return auth_handler.load_users(db)
+    return UserManager.get_all_users(db)
 
 # WebSocket 엔드포인트
 @app.websocket("/chat")

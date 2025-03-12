@@ -3,9 +3,9 @@ PROGEN/
 │   ├── css/
 │   │   └── style.css           # 메인 스타일시트
 │   ├── js/
-│   │   ├── home.js             # 홈페이지 스크립트 (기존 script.js에서 변경)
-│   │   └── login.js            # 로그인 페이지 스크립트 (신규 추가)
-│   ├── image/                  # 이미지 리소스 디렉토리 (신규 추가)
+│   │   ├── home.js             # 홈페이지 스크립트
+│   │   └── login.js            # 로그인 페이지 스크립트
+│   ├── image/                  # 이미지 리소스 디렉토리
 │   │   ├── meta.png            # Meta 모델 아이콘
 │   │   ├── claude.png          # Claude 모델 아이콘
 │   │   └── gemini.png          # Gemini 모델 아이콘
@@ -13,36 +13,38 @@ PROGEN/
 │   └── login.html              # 로그인 페이지
 │
 ├── backend/                     # 백엔드 코어 디렉토리
-│   ├── __init__.py 
-│   ├── crawl.py/                # utils/crawl/ 클래스 총집합 파일, app.py에서 활용
-│   ├── chat.py/                 # 현재 비어있음, app.py에서 활용
-│   ├── db.py/                   # 현재 비어있음, app.py에서 활용    
-│   ├── prop.py/                 # utils/prop/ 클래스 총집합 파일, app.py에서 활용  
-│   ├── login.py               # 로그인/인증 관련 유틸리티 (신규 추가)
-│   └── utils/                 # 유틸리티 함수 디렉토리
-│       ├── __init__.py        
-│       ├── agent/             # AI 에이전트 관련 파일
+│   ├── __init__.py             # 패키지 초기화 파일
+│   ├── crawl.py                # 크롤링 관련 인터페이스
+│   ├── chat.py                 # 채팅 관련 인터페이스
+│   ├── dbm.py                  # 데이터베이스 관리 인터페이스
+│   ├── prop.py                 # 문서 처리 및 제안서 인터페이스
+│   ├── login.py                # 로그인/인증 관련 유틸리티
+│   └── utils/                  # 유틸리티 함수 디렉토리
+│       ├── __init__.py         # 패키지 초기화 파일
+│       ├── agent/              # AI 에이전트 관련 파일
 │       │   ├── __init__.py
-│       │   └── ai.py          # AI 관련 핵심 클래스 및 함수
-│       ├── crawl/             # 크롤러 관련 파일
+│       │   └── ai.py           # AI 관련 핵심 클래스 및 함수
+│       ├── crawl/              # 크롤러 관련 파일
 │       │   ├── __init__.py
-│       │   └── crawl.py       # 크롤링 관련 함수
-│       ├── prop/
+│       │   └── crawl.py        # 크롤링 관련 함수
+│       ├── db/                 # 데이터베이스 관련 파일
 │       │   ├── __init__.py
-│       │   ├── dc.py          # 문서 처리 함수, DocumentProcessor
-│       │   └── pg.py          # 제안서 생성 함수. ProposalGenerator
-│       └── chat/              # 채팅 관련 유틸리티
+│       │   ├── models.py       # 데이터베이스 모델 정의
+│       │   └── utils.py        # 데이터베이스 유틸리티 함수
+│       ├── prop/               # 문서 처리 및 제안서 관련 파일
+│       │   ├── __init__.py
+│       │   ├── dc.py           # 문서 처리 클래스 (DocumentProcessor)
+│       │   └── pg.py           # 제안서 생성 클래스 (ProposalGenerator)
+│       └── chat/               # 채팅 관련 유틸리티
 │           ├── __init__.py
-│           ├── models.py      # 메시지, 세션 등 데이터 모델
-│           ├── memory.py      # 메모리 관리 관련 클래스
-│           ├── ai_models.py   # AI 모델 관리 클래스
-│           └── handlers.py    # 메시지 처리 핸들러
+│           ├── models.py       # 메시지, 세션 등 데이터 모델
+│           ├── memory.py       # 메모리 관리 관련 클래스
+│           ├── ai_models.py    # AI 모델 관리 클래스
+│           └── handlers.py     # 메시지 처리 핸들러
 │
 ├── .env                        # 환경 변수 설정
 ├── app.py                      # FastAPI 메인 애플리케이션
-├── chat.py                # 채팅 관련 유틸리티 (신규 추가)
-├── app.py                      # FastAPI 메인 애플리케이션
+├── dbcon.py                    # 데이터베이스 연결 설정 (곧 backend/utils/db로 이동 예정)
 ├── directory.txt               # 디렉토리 구조 문서
 ├── requirements.txt            # 프로젝트 의존성 목록
-└── user.json                   # 사용자 정보 데이터
-
+└── users.json                   # 사용자 정보 데이터

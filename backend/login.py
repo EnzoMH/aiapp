@@ -7,7 +7,9 @@ import os
 from dotenv import load_dotenv
 from typing import Optional, Dict, List
 
-from dbcon import get_db, AuthUtils, User, UserRole
+# 수정된 임포트
+from backend.utils.db import get_db, User, UserRole
+from backend.utils.db.utils import AuthUtils
 
 # .env 파일 로드
 load_dotenv()
