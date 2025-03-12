@@ -14,12 +14,16 @@ import jwt
 
 from backend.utils.agent.ai import WebSocketManager, FileHandler
 from backend.login import LoginUtils, auth_handler, UserRole
-from chat import ChatManager, MessageHandler, AIModel, MessageRole, ChatMessage, ChatSession
+# 수정된 임포트
+from backend.chat import ChatManager, ChatSession
+from backend.utils.chat.models import ChatMessage, MessageRole
+from backend.utils.chat.ai_models import AIModel
+from backend.utils.chat.handlers import MessageHandler
 
 # SQLAlchemy의 Session 클래스 가져오기
 from sqlalchemy.orm import Session
 
-# dbcon.py에서 필요한 것들을 가져옵니다
+# dbcon.py에서 필요한 것들 가져오기
 from dbcon import engine, SessionLocal, Base, get_db, test_connection
 from docpro import process_file, clean_text
 
