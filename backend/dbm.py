@@ -7,7 +7,8 @@ from datetime import datetime
 from sqlalchemy.orm import Session
 
 # 데이터베이스 관련 임포트
-from backend.utils.db import User, Session as DBSession, Message, Memory, UserRole
+# 수정 후
+from backend.utils.db import User, DBSession, Message, Memory, UserRole
 from backend.utils.db import AuthUtils as DBAuthUtils
 
 class UserManager:
