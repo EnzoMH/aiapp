@@ -7,7 +7,7 @@ from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 import uvicorn
 from datetime import timedelta
 from colorama import init
-from typing import List
+from typing import List, Dict, Any
 import os
 from dotenv import load_dotenv
 import jwt
@@ -214,6 +214,52 @@ async def test_token(token: str = None):
         return {"status": "success", "payload": payload}
     except Exception as e:
         return {"status": "error", "message": f"토큰 디코딩 오류: {str(e)}"}
+
+@app.get("/api/chat/histories")
+async def get_chat_histories(
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """사용자의 대화 기록 목록 조회"""
+    histories = SessionManager.get_user_chat_history(db, current_user["id"])
+    return histories
+
+@app.get("/api/chat/session/{session_id}")
+async def get_chat_session(
+    session_id: str,
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """특정 세션의 대화 내용 조회"""
+    # 세션 소유자 확인
+    session = SessionManager.get_session_by_id(db, session_id)
+    if not session or session["user_id"] != current_user["id"]:
+        raise HTTPException(status_code=404, detail="Session not found")
+    
+    messages = MessageManager.get_session_messages(db, session_id)
+    return {
+        "session_id": session_id,
+        "model": session["model"],
+        "messages": messages
+    }
+
+@app.post("/api/chat/history")
+async def save_chat_history(
+    chat_history: Dict[str, Any],
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """대화 내용 저장"""
+    # 세션 소유자 확인
+    session = SessionManager.get_session_by_id(db, chat_history["session_id"])
+    if not session or session["user_id"] != current_user["id"]:
+        raise HTTPException(status_code=404, detail="Session not found")
+    
+    success = MessageManager.save_chat_session(db, chat_history)
+    if not success:
+        raise HTTPException(status_code=500, detail="Failed to save chat history")
+    
+    return {"status": "success"}
 
 if __name__ == "__main__":
     init()

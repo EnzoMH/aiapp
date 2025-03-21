@@ -169,6 +169,34 @@ class SessionManager:
         db.commit()
         return True
 
+    @staticmethod
+    def get_user_chat_history(db: Session, user_id: str) -> List[Dict[str, Any]]:
+        """사용자의 대화 세션 목록 조회"""
+        # 서브쿼리로 각 세션의 마지막 메시지 가져오기
+        sessions = db.query(DBSession).filter(
+            DBSession.user_id == user_id
+        ).order_by(DBSession.last_updated.desc()).all()
+        
+        result = []
+        for session in sessions:
+            # 세션의 마지막 메시지 가져오기
+            last_message = db.query(Message).filter(
+                Message.session_id == session.session_id
+            ).order_by(Message.timestamp.desc()).first()
+            
+            result.append({
+                "session_id": session.session_id,
+                "model": session.model,
+                "created_at": session.created_at.isoformat(),
+                "last_updated": session.last_updated.isoformat(),
+                "preview": last_message.content[:100] if last_message else "",
+                "message_count": db.query(Message).filter(
+                    Message.session_id == session.session_id
+                ).count()
+            })
+        
+        return result
+
 
 class MessageManager:
     """채팅 메시지 관리 클래스"""
@@ -233,6 +261,37 @@ class MessageManager:
         db.delete(message)
         db.commit()
         return True
+
+    @staticmethod
+    def save_chat_session(db: Session, session_data: Dict[str, Any]) -> bool:
+        """대화 세션 저장"""
+        try:
+            # 세션 정보 업데이트
+            session = db.query(DBSession).filter(
+                DBSession.session_id == session_data["session_id"]
+            ).first()
+            
+            if not session:
+                return False
+            
+            session.last_updated = datetime.utcnow()
+            
+            # 메시지들 저장
+            for msg in session_data["messages"]:
+                message = Message(
+                    session_id=session.session_id,
+                    role=msg["role"],
+                    content=msg["content"]
+                )
+                db.add(message)
+            
+            db.commit()
+            return True
+            
+        except Exception as e:
+            print(f"대화 세션 저장 오류: {str(e)}")
+            db.rollback()
+            return False
 
 
 class MemoryManager:

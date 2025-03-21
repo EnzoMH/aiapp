@@ -276,3 +276,16 @@ textarea {
         max-width: 90%;
     }
 }
+
+/* 대화 기록 패널 애니메이션 */
+#chatHistoryPanel {
+    transition: transform 0.3s ease;
+}
+
+.chat-history-item {
+    transition: background-color 0.2s ease;
+}
+
+.chat-history-item:hover {
+    background-color: rgba(0, 0, 0, 0.05);
+}

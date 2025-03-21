@@ -87,7 +87,10 @@ function setupEventListeners() {
     // 새 채팅 버튼
     const newChatBtn = document.getElementById('newChatBtn');
     if (newChatBtn) {
-        newChatBtn.addEventListener('click', startNewChat);
+        newChatBtn.addEventListener('click', async () => {
+            await saveChatHistory();
+            startNewChat();
+        });
     }
     
     // 관리자 기능 - 사용자 관리
@@ -138,6 +141,24 @@ function setupEventListeners() {
             });
         });
     }
+
+    // 대화 기록 버튼
+    const chatHistoryBtn = document.getElementById('chatHistoryBtn');
+    const closeChatHistory = document.getElementById('closeChatHistory');
+    
+    if (chatHistoryBtn) {
+        chatHistoryBtn.addEventListener('click', toggleChatHistory);
+    }
+    if (closeChatHistory) {
+        closeChatHistory.addEventListener('click', toggleChatHistory);
+    }
+
+    // 페이지 새로고침/종료 시 대화 저장
+    window.addEventListener('beforeunload', async (e) => {
+        if (currentSessionId) {
+            await saveChatHistory();
+        }
+    });
 }
 
 // 사용자 정보 로드 및 UI 업데이트
@@ -913,3 +934,176 @@ function validateMessage(content) {
 // 웹소켓 재연결 로직 개선
 let reconnectAttempts = 0;
 const maxReconnectAttempts = 5;
+
+// 대화 기록 패널 토글
+function toggleChatHistory() {
+    const chatHistoryPanel = document.getElementById('chatHistoryPanel');
+    if (!chatHistoryPanel) {
+        createChatHistoryPanel();
+    } else {
+        chatHistoryPanel.classList.toggle('hidden');
+        if (!chatHistoryPanel.classList.contains('hidden')) {
+            loadChatHistories();
+        }
+    }
+}
+
+// 대화 기록 패널 생성
+function createChatHistoryPanel() {
+    const panel = document.createElement('div');
+    panel.id = 'chatHistoryPanel';
+    panel.className = 'absolute right-0 top-0 h-full w-80 bg-white border-l border-gray-200 shadow-lg z-30';
+    panel.innerHTML = `
+        <div class="p-4 border-b border-gray-200 flex justify-between items-center">
+            <h3 class="text-lg font-semibold">대화 기록</h3>
+            <button class="text-gray-500 hover:text-gray-700" onclick="toggleChatHistory()">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+        <div id="chatHistoryList" class="overflow-y-auto h-[calc(100%-4rem)]">
+            <!-- 대화 기록이 여기에 동적으로 추가됨 -->
+        </div>
+    `;
+    document.querySelector('.flex-grow').appendChild(panel);
+    loadChatHistories();
+}
+
+// 대화 기록 저장
+async function saveChatHistory() {
+    if (!currentSessionId) return;
+
+    const messages = document.querySelectorAll('.message');
+    if (messages.length === 0) return;
+
+    const chatHistory = {
+        session_id: currentSessionId,
+        messages: Array.from(messages).map(msg => ({
+            role: msg.classList.contains('user') ? 'user' : 'assistant',
+            content: msg.classList.contains('user') ? 
+                msg.textContent : 
+                msg.querySelector('.message-content').dataset.originalText || msg.querySelector('.message-content').textContent
+        }))
+    };
+
+    try {
+        const response = await fetch('/api/chat/history', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${localStorage.getItem('access_token')}`
+            },
+            body: JSON.stringify(chatHistory)
+        });
+
+        if (!response.ok) throw new Error('대화 저장 실패');
+    } catch (error) {
+        console.error('대화 저장 오류:', error);
+    }
+}
+
+// 대화 기록 불러오기
+async function loadChatHistories() {
+    const historyList = document.getElementById('chatHistoryList');
+    if (!historyList) return;
+
+    try {
+        const response = await fetch('/api/chat/histories', {
+            headers: {
+                'Authorization': `Bearer ${localStorage.getItem('access_token')}`
+            }
+        });
+
+        if (!response.ok) throw new Error('대화 기록 로드 실패');
+
+        const histories = await response.json();
+        historyList.innerHTML = histories.map(history => `
+            <div class="chat-history-item p-4 border-b border-gray-200 hover:bg-gray-50 cursor-pointer"
+                 onclick="loadChatSession('${history.session_id}')">
+                <div class="font-medium text-gray-800">${formatDate(history.created_at)}</div>
+                <div class="text-sm text-gray-600 truncate">${history.preview}</div>
+            </div>
+        `).join('');
+    } catch (error) {
+        console.error('대화 기록 로드 오류:', error);
+        historyList.innerHTML = '<div class="p-4 text-gray-500">대화 기록을 불러올 수 없습니다.</div>';
+    }
+}
+
+// 특정 대화 세션 불러오기
+async function loadChatSession(sessionId) {
+    try {
+        const response = await fetch(`/api/chat/session/${sessionId}`, {
+            headers: {
+                'Authorization': `Bearer ${localStorage.getItem('access_token')}`
+            }
+        });
+
+        if (!response.ok) throw new Error('대화 세션 로드 실패');
+
+        const session = await response.json();
+        
+        // 현재 대화 초기화
+        document.getElementById('chat-messages').innerHTML = '';
+        currentSessionId = sessionId;
+
+        // 메시지 복원
+        session.messages.forEach(msg => {
+            if (msg.role === 'user') {
+                addUserMessage(msg.content);
+            } else {
+                addAssistantMessage(msg.content);
+            }
+        });
+
+        // 대화 기록 패널 닫기
+        toggleChatHistory();
+    } catch (error) {
+        console.error('대화 세션 로드 오류:', error);
+        showToast('error', '대화를 불러올 수 없습니다.');
+    }
+}
+
+// 날짜 포맷팅 유틸리티
+function formatDate(dateString) {
+    const date = new Date(dateString);
+    return date.toLocaleDateString('ko-KR', {
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+    });
+}
+
+// 어시스턴트 메시지 추가 함수 (기존 함수 수정)
+function addAssistantMessage(content, model) {
+    const chatMessages = document.getElementById('chat-messages');
+    let messageContainer = document.querySelector('.message-container');
+    if (!messageContainer) {
+        messageContainer = document.createElement('div');
+        messageContainer.className = 'message-container';
+        chatMessages.appendChild(messageContainer);
+    }
+
+    const messageDiv = document.createElement('div');
+    messageDiv.className = 'message assistant flex items-start';
+    
+    const avatar = document.createElement('div');
+    avatar.className = 'shrink-0 mr-3';
+    
+    const avatarImg = document.createElement('img');
+    avatarImg.src = `/static/image/${model || currentModel}.png`;
+    avatarImg.alt = `${model || currentModel} 아바타`;
+    avatarImg.className = 'w-8 h-8 rounded-full';
+    
+    const contentDiv = document.createElement('div');
+    contentDiv.className = 'message-content flex-grow';
+    contentDiv.textContent = content;
+    
+    avatar.appendChild(avatarImg);
+    messageDiv.appendChild(avatar);
+    messageDiv.appendChild(contentDiv);
+    messageContainer.appendChild(messageDiv);
+    
+    scrollToBottom();
+}
