@@ -111,14 +111,14 @@ class SessionManager:
         session = DBSession(
             user_id=user_id,
             model=model,
-            system_prompt=system_prompt
+            system_prompt=system_prompt or "당신은 도움이 되는 AI 어시스턴트입니다. 사용자의 질문에 대해 정확하고 친절하게 답변하세요."
         )
         db.add(session)
         db.commit()
         db.refresh(session)
         
         return {
-            "session_id": session.session_id,
+            "session_id": str(session.session_id),  # UUID를 문자열로 변환
             "user_id": session.user_id,
             "model": session.model,
             "system_prompt": session.system_prompt,
@@ -196,6 +196,27 @@ class SessionManager:
             })
         
         return result
+    
+    @staticmethod
+    def create_or_get_session(db: Session, user_id: str, model: str = "meta") -> Dict[str, Any]:
+        """세션 생성 또는 가져오기"""
+        # 활성 세션 확인
+        active_session = db.query(DBSession).filter(
+            DBSession.user_id == user_id,
+            DBSession.active == True
+        ).first()
+        
+        if active_session:
+            return {
+                "session_id": active_session.session_id,
+                "user_id": active_session.user_id,
+                "model": active_session.model,
+                "created_at": active_session.created_at.isoformat(),
+                "last_updated": active_session.last_updated.isoformat()
+            }
+        
+        # 새 세션 생성
+        return SessionManager.create_session(db, user_id, model)
 
 
 class MessageManager:
@@ -203,18 +224,21 @@ class MessageManager:
     
     @staticmethod
     def get_session_messages(db: Session, session_id: str) -> List[Dict[str, Any]]:
-        """세션의 모든 메시지 조회"""
-        messages = db.query(Message).filter(Message.session_id == session_id).order_by(Message.timestamp).all()
-        return [
-            {
-                "message_id": message.message_id,
-                "session_id": message.session_id,
-                "role": message.role,
-                "content": message.content,
-                "timestamp": message.timestamp.isoformat()
-            }
-            for message in messages
-        ]
+        try:
+            messages = db.query(Message).filter(
+                Message.session_id == session_id
+            ).order_by(Message.timestamp.asc()).all()
+            
+            return [{
+                "message_id": msg.message_id,
+                "role": msg.role,
+                "content": msg.content,
+                "timestamp": msg.timestamp.isoformat(),
+                "model": msg.model  # 모델 정보 추가
+            } for msg in messages]
+        except Exception as e:
+            print(f"Error getting session messages: {str(e)}")
+            return []
     
     @staticmethod
     def add_message(db: Session, session_id: str, role: str, content: str) -> Dict[str, Any]:
@@ -264,34 +288,66 @@ class MessageManager:
 
     @staticmethod
     def save_chat_session(db: Session, session_data: Dict[str, Any]) -> bool:
-        """대화 세션 저장"""
         try:
-            # 세션 정보 업데이트
-            session = db.query(DBSession).filter(
-                DBSession.session_id == session_data["session_id"]
-            ).first()
+            # 기존 메시지 삭제
+            db.query(Message).filter(
+                Message.session_id == session_data["session_id"]
+            ).delete()
             
-            if not session:
-                return False
-            
-            session.last_updated = datetime.utcnow()
-            
-            # 메시지들 저장
+            # 새 메시지 저장
             for msg in session_data["messages"]:
                 message = Message(
-                    session_id=session.session_id,
+                    session_id=session_data["session_id"],
                     role=msg["role"],
-                    content=msg["content"]
+                    content=msg["content"],
+                    model=msg.get("model", session_data.get("model", "meta"))  # 메시지의 모델 정보 또는 세션의 모델 정보 사용
                 )
                 db.add(message)
             
+            # 세션 업데이트 시간 및 모델 정보 갱신
+            session = db.query(DBSession).filter(
+                DBSession.session_id == session_data["session_id"]
+            ).first()
+            if session:
+                session.last_updated = datetime.utcnow()
+                # 모델 정보가 있으면 업데이트
+                if "model" in session_data:
+                    session.model = session_data["model"]
+            
             db.commit()
             return True
-            
         except Exception as e:
-            print(f"대화 세션 저장 오류: {str(e)}")
+            print(f"Error in save_chat_session: {str(e)}")
             db.rollback()
             return False
+        
+    @staticmethod
+    def get_session_preview(db: Session, session_id: str) -> Optional[Dict[str, Any]]:
+        """세션의 첫 번째 또는 가장 최근 메시지를 미리보기로 가져옵니다"""
+        try:
+            # 사용자 메시지 중 첫 번째 메시지 찾기 (보통 대화 주제를 잘 나타냄)
+            user_message = db.query(Message).filter(
+                Message.session_id == session_id,
+                Message.role == 'user'
+            ).order_by(Message.timestamp.asc()).first()
+            
+            # 사용자 메시지가 없으면 가장 최근 메시지 사용
+            if not user_message:
+                recent_message = db.query(Message).filter(
+                    Message.session_id == session_id
+                ).order_by(Message.timestamp.desc()).first()
+                return {
+                    "content": recent_message.content if recent_message else "",
+                    "timestamp": recent_message.timestamp.isoformat() if recent_message else None
+                }
+                
+            return {
+                "content": user_message.content,
+                "timestamp": user_message.timestamp.isoformat()
+            }
+        except Exception as e:
+            print(f"Error in get_session_preview: {str(e)}")
+            return None
 
 
 class MemoryManager:

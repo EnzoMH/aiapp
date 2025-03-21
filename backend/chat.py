@@ -107,18 +107,24 @@ class ChatSession:
 class ChatManager:
     def __init__(self):
         self.active_sessions: Dict[str, ChatSession] = {}
-        self.connected_clients: Dict[str, WebSocket] = {}
+        self.active_connections: Dict[str, WebSocket] = {}
         self.ai_model_manager = AIModelManager()
     
-    async def connect_client(self, websocket: WebSocket, client_id: str) -> None:
+    async def connect_client(self, websocket: WebSocket, user_id: str, session_id: Optional[str] = None):
         """클라이언트 연결 처리"""
-        await websocket.accept()
-        self.connected_clients[client_id] = websocket
+        self.active_connections[user_id] = websocket
+        
+        # session_id가 제공되면 해당 세션을 활성화 (로딩 또는 생성)
+        if session_id:
+            self.get_or_create_session(user_id, session_id)
+            logger.info(f"User {user_id} connected with session {session_id}")
+        else:
+            logger.info(f"User {user_id} connected without session ID")
     
-    def disconnect_client(self, client_id: str) -> None:
-        """클라이언트 연결 해제 처리"""
-        if client_id in self.connected_clients:
-            del self.connected_clients[client_id]
+    def disconnect_client(self, user_id: str):
+        """클라이언트 연결 해제"""
+        if user_id in self.active_connections:
+            del self.active_connections[user_id]
     
     def get_or_create_session(self, user_id: str, session_id: Optional[str] = None) -> ChatSession:
         """사용자 세션 가져오기 또는 생성"""
@@ -131,7 +137,7 @@ class ChatManager:
         return self.active_sessions[session_id]
     
     async def process_message(self, user_id: str, content: str, session_id: Optional[str] = None, 
-                         model: AIModel = AIModel.CLAUDE) -> Dict[str, Any]:
+                     model: AIModel = AIModel.CLAUDE) -> Dict[str, Any]:
         """사용자 메시지 처리 및 AI 응답 생성"""
         # 세션 ID가 없으면 사용자의 기존 세션을 찾거나 새로 생성
         if not session_id:
@@ -162,22 +168,35 @@ class ChatManager:
         context = self._get_full_context(session)
         
         # 클라이언트 웹소켓 가져오기
-        websocket = self.connected_clients.get(user_id)
+        websocket = self.active_connections.get(user_id)
         
         # AI 응답 생성
         ai_response = await self.ai_model_manager.generate_response(context, model, websocket)
         
         # AI 응답 메시지 추가
-        assistant_message = ChatMessage(MessageRole.ASSISTANT, ai_response)
+        assistant_message = ChatMessage(MessageRole.ASSISTANT, ai_response, model=model) 
         session.add_message(assistant_message)
         
         # 세션 저장
         self.save_session(session.session_id)
         
+        # 응답이 완성되면 클라이언트에게 직접 알림
+        if websocket:
+            try:
+                await websocket.send_json({
+                    "type": "assistant",
+                    "content": ai_response,
+                    "model": model,
+                    "session_id": session.session_id
+                })
+            except Exception as e:
+                logger.error(f"Error sending response to user {user_id}: {str(e)}")
+        
         # 응답 반환
         return {
             "session_id": session.session_id,
-            "message": assistant_message.to_dict()
+            "message": assistant_message.to_dict(),
+            "model": str(model)  # 모델 정보 추가
         }
         
     def _get_full_context(self, session: ChatSession) -> List[ChatMessage]:
@@ -197,8 +216,8 @@ class ChatManager:
 
     async def send_message(self, client_id: str, message: Dict[str, Any]) -> None:
         """클라이언트에게 메시지 전송"""
-        if client_id in self.connected_clients:
-            await self.connected_clients[client_id].send_json(message)
+        if client_id in self.active_connections:
+            await self.active_connections[client_id].send_json(message)
     
     def save_session(self, session_id: str) -> None:
         """세션을 데이터베이스에 저장"""
@@ -241,6 +260,7 @@ class ChatManager:
                             session_id=session_id,
                             role=message.role,
                             content=message.content,
+                            model=str(message.model) if hasattr(message, 'model') and message.model else str(chat_session.model),
                             timestamp=datetime.fromtimestamp(message.timestamp)
                         )
                         db.add(db_message)
@@ -321,7 +341,7 @@ class ChatManager:
         context = self._get_full_context(session)
         
         # 클라이언트 웹소켓 가져오기
-        websocket = self.connected_clients.get(user_id)
+        websocket = self.active_connections.get(user_id)
         
         # 복잡도 평가 (간단한 휴리스틱)
         is_complex = self._is_complex_question(content)
@@ -335,7 +355,7 @@ class ChatManager:
                 context, model, websocket)
         
         # 응답 처리 및 반환 (기존 코드와 동일)
-        assistant_message = ChatMessage(MessageRole.ASSISTANT, ai_response)
+        assistant_message = ChatMessage(MessageRole.ASSISTANT, ai_response, model=model)
         session.add_message(assistant_message)
         self.save_session(session.session_id)
         
@@ -360,3 +380,36 @@ class ChatManager:
         has_complex_keywords = any(keyword in content for keyword in complex_keywords)
         
         return is_long or has_complex_keywords
+    
+    async def get_recent_sessions(self, user_id: str, limit: int = 10) -> List[Dict[str, Any]]:
+        """사용자의 최근 대화 세션 목록 조회"""
+        db = SessionLocal()
+        try:
+            # 세션 목록 조회 (최신순)
+            sessions = db.query(DBSession).filter(
+                DBSession.user_id == user_id
+            ).order_by(DBSession.last_updated.desc()).limit(limit).all()
+            
+            result = []
+            for session in sessions:
+                # 세션별 미리보기 메시지 가져오기
+                preview_message = db.query(DBMessage).filter(
+                    DBMessage.session_id == session.session_id
+                ).order_by(DBMessage.timestamp.asc()).first()
+                
+                # 결과 구성
+                result.append({
+                    "session_id": str(session.session_id),
+                    "model": session.model,
+                    "created_at": session.created_at.isoformat(),
+                    "last_updated": session.last_updated.isoformat(),
+                    "active": session.active,
+                    "preview": preview_message.content[:100] if preview_message else "새 대화"
+                })
+            
+            return result
+        except Exception as e:
+            logger.error(f"사용자 세션 조회 오류: {str(e)}")
+            return []
+        finally:
+            db.close()

@@ -58,6 +58,7 @@ class Session(Base):
     session_id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     user_id = Column(String(50), ForeignKey("users.user_id"))
     model = Column(String(20), nullable=False)
+    title = Column(String(100), default="새 대화")  # 추가된 필드
     system_prompt = Column(Text, default="당신은 도움이 되는 AI 어시스턴트입니다. 사용자의 질문에 대해 정확하고 친절하게 답변하세요.")
     created_at = Column(DateTime, default=datetime.utcnow)
     last_updated = Column(DateTime, default=datetime.utcnow)
@@ -74,6 +75,7 @@ class Message(Base):
     session_id = Column(String(36), ForeignKey("sessions.session_id"))
     role = Column(String(10), nullable=False)
     content = Column(Text, nullable=False)
+    model = Column(String(20), nullable=True)
     timestamp = Column(DateTime, default=datetime.utcnow)
     
     # 관계 정의

@@ -1,31 +1,59 @@
-# 메시지 처리 핸들러
-from typing import Dict, Any, TYPE_CHECKING
-from fastapi import WebSocket, WebSocketDisconnect
+from fastapi import WebSocket
+from fastapi.websockets import WebSocketDisconnect
+from typing import Dict, Any
 import logging
-
+from uuid import UUID
+from .models import AIModel
+import traceback
 
 # 로깅 설정
 logger = logging.getLogger(__name__)
 
-# 타입 체크용 임포트
-if TYPE_CHECKING:
-    from backend.chat import ChatManager
-
-# 실제 사용할 임포트
-from backend.utils.chat.ai_models import AIModel
-
-# 메시지 처리기
-# 메시지 처리기
 class MessageHandler:
     def __init__(self, chat_manager: 'ChatManager'):
         self.chat_manager = chat_manager
     
-    async def handle_message(self, websocket: WebSocket, user_id: str) -> None:
+    async def process_message(self, websocket: WebSocket, user_id: str, session_id: str, message_data: Dict[str, Any]) -> None:
+        """웹소켓에서 받은 첫 메시지 처리"""
+        try:
+            content = message_data.get("content", "")
+            model_name = message_data.get("model", "meta")
+            
+            # 메시지 처리 시작 알림
+            await websocket.send_json({
+                "type": "processing",
+                "data": {"session_id": session_id}
+            })
+            
+            # ChatManager를 통해 메시지 처리
+            response = await self.chat_manager.process_message(
+                user_id=user_id,
+                content=content,
+                session_id=session_id,
+                model=model_name
+            )
+            
+            # 응답 완료 알림
+            await websocket.send_json({
+                "type": "message_complete",
+                "data": response
+            })
+            
+        except Exception as e:
+            logger.error(f"Error processing first message: {str(e)}")
+            logger.error(traceback.format_exc())
+            await websocket.send_json({
+                "type": "error",
+                "data": {"message": "첫 메시지 처리 중 오류가 발생했습니다"}
+            })
+    
+    async def handle_message(self, websocket: WebSocket, user_id: str, session_id: str = None) -> None:
         """웹소켓 메시지 처리"""
         try:
             while True:
                 # 메시지 수신
                 data = await websocket.receive_json()
+                logger.debug(f"Received message from {user_id}: {data}")
                 
                 # 메시지 유형 확인
                 message_type = data.get("type", "message")
@@ -33,57 +61,73 @@ class MessageHandler:
                 if message_type == "message":
                     # 채팅 메시지 처리
                     content = data.get("content", "")
-                    session_id = data.get("session_id")
+                    # 파라미터로 받은 session_id가 있으면 우선 사용, 없으면 메시지에서 가져오기
+                    current_session_id = data.get("session_id", session_id)
                     model_name = data.get("model", AIModel.CLAUDE)
+                    
+                    # session_id가 있을 경우에만 문자열 변환
+                    if current_session_id:
+                        current_session_id = str(current_session_id)
                     
                     # 모델 유효성 검사
                     try:
                         model = AIModel(model_name)
                     except ValueError:
+                        logger.warning(f"Invalid model name: {model_name}, using default")
                         model = AIModel.CLAUDE
                     
                     # 메시지 처리 시작 알림
                     await websocket.send_json({
                         "type": "processing",
-                        "data": {"session_id": session_id}
+                        "data": {"session_id": current_session_id}
                     })
                     
                     # 메시지 처리 및 응답 생성
                     response = await self.chat_manager.process_message(
                         user_id=user_id,
                         content=content,
-                        session_id=session_id,
+                        session_id=current_session_id,
                         model=model
                     )
                     
-                    # 응답 완료 알림 (명시적으로 스트리밍 완료 신호 전송)
+                    # UUID 객체를 문자열로 변환
+                    if isinstance(response.get("session_id"), UUID):
+                        response["session_id"] = str(response["session_id"])
+                    
+                    # 응답 완료 알림
                     await websocket.send_json({
                         "type": "message_complete",
                         "data": response
                     })
-                               
+                    
                 elif message_type == "get_sessions":
                     # 사용자 세션 목록 요청 처리
-                    # 실제 구현에서는 DB에서 사용자의 세션 목록 조회
+                    sessions = await self.chat_manager.get_user_sessions(user_id)
                     await websocket.send_json({
                         "type": "sessions",
-                        "data": {"sessions": []}  # 실제 세션 목록으로 대체 필요
+                        "data": {"sessions": sessions}
                     })
                     
                 elif message_type == "change_model":
                     # 모델 변경 요청 처리
-                    session_id = data.get("session_id")
+                    current_session_id = data.get("session_id", session_id)
                     model_name = data.get("model")
                     
-                    if session_id and model_name:
-                        session = self.chat_manager.get_or_create_session(user_id, session_id)
+                    if current_session_id and model_name:
                         try:
-                            session.model = AIModel(model_name)
+                            session = self.chat_manager.get_or_create_session(user_id, current_session_id)
+                            model = AIModel(model_name)
+                            session.model = model
+                            
                             await websocket.send_json({
                                 "type": "model_changed",
-                                "data": {"session_id": session_id, "model": model_name}
+                                "data": {
+                                    "session_id": str(current_session_id),
+                                    "model": model.value
+                                }
                             })
-                        except ValueError:
+                        except ValueError as e:
+                            logger.error(f"Model change error: {str(e)}")
                             await websocket.send_json({
                                 "type": "error",
                                 "data": {"message": "유효하지 않은 모델명"}
@@ -92,8 +136,11 @@ class MessageHandler:
                 elif message_type == "reasoning_request":
                     # 추론 모드로 메시지 처리
                     content = data.get("content", "")
-                    session_id = data.get("session_id")
+                    current_session_id = data.get("session_id", session_id)
                     model_name = data.get("model", AIModel.CLAUDE)
+                    
+                    if current_session_id:
+                        current_session_id = str(current_session_id)
                     
                     try:
                         model = AIModel(model_name)
@@ -102,15 +149,22 @@ class MessageHandler:
                     
                     await websocket.send_json({
                         "type": "processing",
-                        "data": {"session_id": session_id, "reasoning_mode": True}
+                        "data": {
+                            "session_id": current_session_id,
+                            "reasoning_mode": True
+                        }
                     })
                     
                     response = await self.chat_manager.process_message_with_reasoning(
                         user_id=user_id,
                         content=content,
-                        session_id=session_id,
+                        session_id=current_session_id,
                         model=model
                     )
+                    
+                    # UUID 객체를 문자열로 변환
+                    if isinstance(response.get("session_id"), UUID):
+                        response["session_id"] = str(response["session_id"])
                     
                     await websocket.send_json({
                         "type": "message_complete",
@@ -119,6 +173,7 @@ class MessageHandler:
                 
                 else:
                     # 알 수 없는 메시지 유형
+                    logger.warning(f"Unknown message type: {message_type}")
                     await websocket.send_json({
                         "type": "error",
                         "data": {"message": "알 수 없는 메시지 유형"}
@@ -126,16 +181,19 @@ class MessageHandler:
                     
         except WebSocketDisconnect:
             # 연결 해제 처리
+            logger.info(f"WebSocket disconnected for user: {user_id}")
             self.chat_manager.disconnect_client(user_id)
+            
         except Exception as e:
             # 오류 처리
-            logger.error(f"메시지 처리 오류: {str(e)}")
+            logger.error(f"Message handling error for user {user_id}: {str(e)}")
+            logger.error(traceback.format_exc())
             try:
                 await websocket.send_json({
                     "type": "error",
-                    "data": {"message": "서버 내부 오류"}
+                    "data": {"message": "서버 내부 오류가 발생했습니다"}
                 })
             except:
-                pass
-            self.chat_manager.disconnect_client(user_id)
-            
+                logger.error("Failed to send error message to client")
+            finally:
+                self.chat_manager.disconnect_client(user_id)

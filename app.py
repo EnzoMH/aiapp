@@ -11,6 +11,7 @@ from typing import List, Dict, Any
 import os
 from dotenv import load_dotenv
 import jwt
+import json
 
 # login utils import, 로그인 유틸 가져오기
 from backend.login import LoginUtils, UserRole
@@ -36,6 +37,10 @@ from backend.dbm import UserManager, SessionManager, MessageManager, MemoryManag
 # .env 파일 로드
 load_dotenv()
 
+from fastapi.responses import JSONResponse
+from backend.utils.json_encoder import CustomJSONEncoder
+
+
 
 # JWT 설정
 JWT_SECRET_KEY = os.getenv("JWT_SECRET_KEY")
@@ -54,6 +59,8 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+app.json_encoder = CustomJSONEncoder
 
 # 정적 파일 및 템플릿 설정
 app.mount("/static", StaticFiles(directory="static"), name="static")
@@ -114,44 +121,137 @@ async def get_all_users(
 ):
     return UserManager.get_all_users(db)
 
-# WebSocket 엔드포인트
 @app.websocket("/chat")
 async def websocket_endpoint(websocket: WebSocket, token: str = None):
-    # 사용자 인증 처리
-    if token:
-        try:
-            # WebSocket에서는 Depends를 사용할 수 없으므로 직접 세션 생성
-            db = SessionLocal()
-            try:
-                user = await LoginUtils.verify_user(token, db)
-                user_id = user["id"]
-            finally:
-                db.close()
-        except:
-            await websocket.close(code=1008, reason="인증 실패")
-            return
-    else:
-        # 인증 없이 테스트용 (실제 환경에서는 제거)
-        user_id = "anonymous_user"
-    
-    # 클라이언트 연결
-    await chat_manager.connect_client(websocket, user_id)
+    await websocket.accept()
+    db = SessionLocal()
+    user_id = None
     
     try:
-        # 연결 성공 메시지
+        # 사용자 인증
+        user = await LoginUtils.verify_user(token, db)
+        user_id = user["id"]
+        
+        # 첫 메시지를 받아서 모델 정보 확인
+        first_message = await websocket.receive_text()
+        message_data = json.loads(first_message)
+        model_type = message_data.get("model", "meta")  # 기본값은 meta
+        
+        # 세션 ID 확인 - 기존 세션이거나 새 세션
+        session_id = message_data.get("session_id")
+        if session_id:
+            # 기존 세션 검증
+            session = SessionManager.get_session_by_id(db, session_id)
+            if not session or session["user_id"] != user_id:
+                # 유효하지 않은 세션 ID - 새로 생성
+                session = SessionManager.create_session(db, user_id, model_type)
+                session_id = str(session["session_id"])
+        else:
+            # 세션 생성 (클라이언트 선택 모델 사용)
+            session = SessionManager.create_session(db, user_id, model_type)
+            session_id = str(session["session_id"])
+        
+        # 연결 성공 메시지 전송
         await websocket.send_json({
             "type": "connection_established",
-            "data": {"user_id": user_id}
+            "data": {
+                "user_id": user_id,
+                "session_id": session_id,
+                "model": model_type
+            }
         })
         
-        # 메시지 처리 핸들러에 위임
-        await message_handler.handle_message(websocket, user_id)
+        # 첫 메시지 처리
+        if message_data.get("type") == "message" and message_data.get("content"):
+            print(f"첫 메시지 처리 시작: {message_data.get('content')}")
+            
+            # 첫 메시지 처리 - ChatManager의 process_message 메소드 사용
+            response = await chat_manager.process_message(
+                user_id=user_id,
+                content=message_data.get("content", ""),
+                session_id=session_id,
+                model=model_type
+            )
+            print(f"process_message 응답: {response}")
+            
+            # 응답 내용 확인
+            if response and "message" in response and "content" in response["message"]:
+                # 실시간 응답 전송 (프론트엔드에서 표시용)
+                await websocket.send_json({
+                    "type": "assistant",  # 프론트엔드가 기대하는 타입
+                    "content": response["message"]["content"],
+                    "model": model_type,
+                    "session_id": session_id
+                })
+                
+                # 메시지 완료 신호 전송
+                await websocket.send_json({
+                    "type": "message_complete",
+                    "data": {
+                        "session_id": session_id
+                    }
+                })
+            else:
+                print("응답에 메시지 또는 내용이 없습니다.")
+        
+        # 클라이언트 연결 등록 (세션 ID도 함께 전달)
+        await chat_manager.connect_client(websocket, user_id, session_id)
+        
+        # 메시지 처리 시작
+        await message_handler.handle_message(websocket, user_id, session_id)
             
     except Exception as e:
-        print(f"WebSocket 오류: {str(e)}")
+        print(f"WebSocket 처리 오류: {str(e)}")
+        try:
+            await websocket.send_json({
+                "type": "error",
+                "data": {"message": f"처리 중 오류가 발생했습니다: {str(e)}"}
+            })
+        except:
+            pass
     finally:
-        # 연결 종료 시 클라이언트 연결 해제
-        chat_manager.disconnect_client(user_id)
+        # 연결 정리
+        if user_id:
+            chat_manager.disconnect_client(user_id)
+        db.close()
+
+# 세션 상태 업데이트 API 추가
+@app.post("/api/chat/session/{session_id}/status")
+async def update_session_status(
+    session_id: str,
+    status_data: Dict[str, bool],
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """세션 활성 상태 업데이트"""
+    try:
+        # 세션 소유자 확인
+        session = SessionManager.get_session_by_id(db, session_id)
+        if not session or session["user_id"] != current_user["id"]:
+            raise HTTPException(status_code=404, detail="Session not found")
+        
+        # 세션 상태 업데이트
+        result = SessionManager.update_session(db, session_id, active=status_data["active"])
+        if not result:
+            raise HTTPException(status_code=500, detail="Failed to update session")
+        
+        return {"status": "success"}
+    except Exception as e:
+        print(f"Error updating session status: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+# 최근 세션 조회 API 추가
+@app.get("/api/chat/recent-sessions")
+async def get_recent_sessions(
+    limit: int = 10,
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """사용자의 최근 대화 세션 목록 조회"""
+    user_id = current_user["id"]
+    chat_manager = ChatManager()
+    sessions = await chat_manager.get_recent_sessions(user_id, limit)
+    return sessions
 
 # 파일 업로드 엔드포인트
 @app.post("/mainupload")
@@ -215,14 +315,43 @@ async def test_token(token: str = None):
     except Exception as e:
         return {"status": "error", "message": f"토큰 디코딩 오류: {str(e)}"}
 
+@app.post("/api/chat/history")
+async def save_chat_history(
+    chat_history: Dict[str, Any],
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """대화 내용 저장"""
+    try:
+        session = SessionManager.get_session_by_id(db, chat_history["session_id"])
+        if not session or session["user_id"] != current_user["id"]:
+            raise HTTPException(status_code=404, detail="Session not found")
+        
+        success = MessageManager.save_chat_session(db, chat_history)
+        if not success:
+            raise HTTPException(status_code=500, detail="Failed to save chat history")
+        
+        return {"status": "success"}
+    except Exception as e:
+        print(f"Error saving chat history: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+    
 @app.get("/api/chat/histories")
 async def get_chat_histories(
     current_user: dict = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """사용자의 대화 기록 목록 조회"""
-    histories = SessionManager.get_user_chat_history(db, current_user["id"])
-    return histories
+    """사용자의 모든 대화 세션 목록 조회"""
+    user_id = current_user["id"]
+    sessions = SessionManager.get_user_sessions(db, user_id)
+    
+    # 각 세션별 미리보기 추가
+    for session in sessions:
+        # 첫 메시지 또는 가장 최근 메시지를 미리보기로 사용
+        preview_message = MessageManager.get_session_preview(db, session["session_id"])
+        session["preview"] = preview_message.get("content", "새로운 대화") if preview_message else "새로운 대화"
+    
+    return sessions
 
 @app.get("/api/chat/session/{session_id}")
 async def get_chat_session(
@@ -242,24 +371,48 @@ async def get_chat_session(
         "model": session["model"],
         "messages": messages
     }
-
-@app.post("/api/chat/history")
-async def save_chat_history(
-    chat_history: Dict[str, Any],
+    
+@app.delete("/api/chat/session/{session_id}")
+async def delete_chat_session(
+    session_id: str,
     current_user: dict = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """대화 내용 저장"""
+    """특정 세션 삭제"""
     # 세션 소유자 확인
-    session = SessionManager.get_session_by_id(db, chat_history["session_id"])
+    session = SessionManager.get_session_by_id(db, session_id)
     if not session or session["user_id"] != current_user["id"]:
         raise HTTPException(status_code=404, detail="Session not found")
     
-    success = MessageManager.save_chat_session(db, chat_history)
-    if not success:
-        raise HTTPException(status_code=500, detail="Failed to save chat history")
-    
-    return {"status": "success"}
+    if SessionManager.delete_session(db, session_id):
+        return {"status": "success", "message": "Session deleted successfully"}
+    else:
+        raise HTTPException(status_code=500, detail="Failed to delete session")
+
+
+@app.post("/api/chat/session/{session_id}/title")
+async def update_session_title(
+    session_id: str,
+    title_data: Dict[str, str],
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """세션 제목 업데이트"""
+    try:
+        # 세션 소유자 확인
+        session = SessionManager.get_session_by_id(db, session_id)
+        if not session or session["user_id"] != current_user["id"]:
+            raise HTTPException(status_code=404, detail="Session not found")
+        
+        # 세션 제목 업데이트
+        result = SessionManager.update_session(db, session_id, title=title_data["title"])
+        if not result:
+            raise HTTPException(status_code=500, detail="Failed to update session title")
+        
+        return {"status": "success"}
+    except Exception as e:
+        print(f"Error updating session title: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 if __name__ == "__main__":
     init()

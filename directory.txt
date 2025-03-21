@@ -1,26 +1,27 @@
 PROGEN/
 ├── static/                      # 정적 파일 디렉토리
 │   ├── css/
-│   │   └── style.css           # 메인 스타일시트
+│   │   └── style.css           # 메인 스타일시트 (대화 기록 패널 스타일 추가)
 │   ├── js/
-│   │   ├── home.js             # 홈페이지 스크립트
+│   │   ├── home.js             # 홈페이지 스크립트 (대화 기록 기능 추가)
 │   │   └── login.js            # 로그인 페이지 스크립트
 │   ├── image/                  # 이미지 리소스 디렉토리
 │   │   ├── meta.png            # Meta 모델 아이콘
 │   │   ├── claude.png          # Claude 모델 아이콘
 │   │   └── gemini.png          # Gemini 모델 아이콘
-│   ├── home.html               # 홈페이지
+│   ├── home.html               # 홈페이지 (대화 기록 UI 추가)
 │   └── login.html              # 로그인 페이지
 │
 ├── backend/                     # 백엔드 코어 디렉토리
 │   ├── __init__.py             # 패키지 초기화 파일
 │   ├── crawl.py                # 크롤링 관련 인터페이스
 │   ├── chat.py                 # 채팅 관련 인터페이스
-│   ├── dbm.py                  # 데이터베이스 관리 인터페이스
+│   ├── dbm.py                  # 데이터베이스 관리 인터페이스 (세션/메시지 관리 기능 추가)
 │   ├── prop.py                 # 문서 처리 및 제안서 인터페이스
 │   ├── login.py                # 로그인/인증 관련 유틸리티
 │   └── utils/                  # 유틸리티 함수 디렉토리
 │       ├── __init__.py         # 패키지 초기화 파일
+│       ├── json_encoder.py     # JSON 인코더 (UUID 직렬화 처리) [신규]
 │       ├── agent/              # AI 에이전트 관련 파일
 │       │   ├── __init__.py
 │       │   └── ai.py           # AI 관련 핵심 클래스 및 함수
@@ -29,7 +30,7 @@ PROGEN/
 │       │   └── crawl.py        # 크롤링 관련 함수
 │       ├── db/                 # 데이터베이스 관련 파일
 │       │   ├── __init__.py
-│       │   ├── models.py       # 데이터베이스 모델 정의
+│       │   ├── models.py       # 데이터베이스 모델 정의 (세션/메시지 모델 추가)
 │       │   └── utils.py        # 데이터베이스 유틸리티 함수
 │       ├── prop/               # 문서 처리 및 제안서 관련 파일
 │       │   ├── __init__.py
@@ -37,14 +38,14 @@ PROGEN/
 │       │   └── pg.py           # 제안서 생성 클래스 (ProposalGenerator)
 │       └── chat/               # 채팅 관련 유틸리티
 │           ├── __init__.py
-│           ├── models.py       # 메시지, 세션 등 데이터 모델
+│           ├── models.py       # 메시지, 세션 등 데이터 모델 (UUID 처리 개선)
 │           ├── memory.py       # 메모리 관리 관련 클래스
 │           ├── ai_models.py    # AI 모델 관리 클래스
-│           └── handlers.py     # 메시지 처리 핸들러
+│           └── handlers.py     # 메시지 처리 핸들러 (WebSocket 처리 개선)
 │
 ├── .env                        # 환경 변수 설정
-├── app.py                      # FastAPI 메인 애플리케이션
+├── app.py                      # FastAPI 메인 애플리케이션 (대화 기록 API 추가)
 ├── dbcon.py                    # 데이터베이스 연결 설정 (곧 backend/utils/db로 이동 예정)
 ├── directory.txt               # 디렉토리 구조 문서
 ├── requirements.txt            # 프로젝트 의존성 목록
-└── users.json                   # 사용자 정보 데이터
+└── users.json                  # 사용자 정보 데이터
