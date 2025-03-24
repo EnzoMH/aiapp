@@ -148,7 +148,19 @@ PSQL_URL=postgresql://progen_user:your_password@localhost:5432/progen
 <summary>6. Initialize Database / 데이터베이스 초기화</summary>
 
 ```bash
-python -c "from dbcon import Base, engine; Base.metadata.create_all(bind=engine)"
+# 데이터베이스 테이블 생성
+python -c "from backend.utils.db import Base, engine; Base.metadata.create_all(bind=engine)"
+
+# 기본 관리자 계정 생성 (선택사항)
+python -c "
+from sqlalchemy.orm import Session
+from backend.utils.db import engine
+from backend.dbm import UserManager
+
+with Session(engine) as db:
+    # 관리자 계정 생성 (ID: admin, 비밀번호: admin123)
+    UserManager.create_user(db, 'admin', 'admin123', 'admin')
+"
 ```
 </details>
 
@@ -164,47 +176,57 @@ python app.py
 
 ```
 PROGEN/
-├── static/                      # Static files directory
-│   ├── css/                     # 정적 파일 디렉토리
-│   │   └── style.css           # Main stylesheet
-│   │                           # 메인 스타일시트
+├── static/                      # 정적 파일 디렉토리
+│   ├── css/
+│   │   └── style.css           # 메인 스타일시트 (대화 기록 패널 스타일 추가)
 │   ├── js/
-│   │   ├── home.js             # Homepage script
-│   │   │                       # 홈페이지 스크립트
-│   │   └── login.js            # Login page script
-│   │                           # 로그인 페이지 스크립트
-│   ├── image/                  # Image resources directory
-│   │                           # 이미지 리소스 디렉토리
-│   ├── home.html               # Homepage
-│   │                           # 홈페이지
-│   └── login.html              # Login page
-│                               # 로그인 페이지
+│   │   ├── home.js             # 홈페이지 스크립트 (대화 기록 기능 추가)
+│   │   └── login.js            # 로그인 페이지 스크립트
+│   ├── image/                  # 이미지 리소스 디렉토리
+│   │   ├── meta.png            # Meta 모델 아이콘
+│   │   ├── claude.png          # Claude 모델 아이콘
+│   │   └── gemini.png          # Gemini 모델 아이콘
+│   ├── home.html               # 홈페이지 (대화 기록 UI 추가)
+│   └── login.html              # 로그인 페이지
 │
-├── backend/                     # Backend core directory
-│   │                           # 백엔드 코어 디렉토리
-│   ├── login.py                # Login/authentication utilities
-│   │                           # 로그인/인증 관련 유틸리티
-│   ├── dbtest.py               # Database test
-│   │                           # 데이터베이스 테스트
-│   └── utils/                  # Utility functions directory
-│       │                       # 유틸리티 함수 디렉토리
-│       ├── agent/              # AI agent related files
-│       │                       # AI 에이전트 관련 파일
-│       ├── crawl/              # Crawler related files
-│       │                       # 크롤러 관련 파일
-│       └── prop/               # Document processing and proposal generation
-│                               # 문서 처리 및 제안서 생성 관련 파일
+├── backend/                     # 백엔드 코어 디렉토리
+│   ├── __init__.py             # 패키지 초기화 파일
+│   ├── crawl.py                # 크롤링 관련 인터페이스
+│   ├── chat.py                 # 채팅 관련 인터페이스
+│   ├── dbm.py                  # 데이터베이스 관리 인터페이스 (세션/메시지 관리 기능 추가)
+│   ├── prop.py                 # 문서 처리 및 제안서 인터페이스
+│   ├── login.py                # 로그인/인증 관련 유틸리티
+│   └── utils/                  # 유틸리티 함수 디렉토리
+│       ├── __init__.py         # 패키지 초기화 파일
+│       ├── json_encoder.py     # JSON 인코더 (UUID 직렬화 처리)
+│       ├── agent/              # AI 에이전트 관련 파일
+│       │   ├── __init__.py
+│       │   └── ai.py           # AI 관련 핵심 클래스 및 함수
+│       ├── crawl/              # 크롤러 관련 파일
+│       │   ├── __init__.py
+│       │   └── crawl.py        # 크롤링 관련 함수
+│       ├── db/                 # 데이터베이스 관련 파일
+│       │   ├── __init__.py
+│       │   ├── models.py       # 데이터베이스 모델 정의 (세션/메시지 모델 추가)
+│       │   ├── connection.py   # 데이터베이스 연결 설정
+│       │   └── utils.py        # 데이터베이스 유틸리티 함수
+│       ├── prop/               # 문서 처리 및 제안서 관련 파일
+│       │   ├── __init__.py
+│       │   ├── dc.py           # 문서 처리 클래스 (DocumentProcessor)
+│       │   └── pg.py           # 제안서 생성 클래스 (ProposalGenerator)
+│       └── chat/               # 채팅 관련 유틸리티
+│           ├── __init__.py
+│           ├── models.py       # 메시지, 세션 등 데이터 모델 (UUID 처리 개선)
+│           ├── memory.py       # 메모리 관리 관련 클래스
+│           ├── ai_models.py    # AI 모델 관리 클래스
+│           └── handlers.py     # 메시지 처리 핸들러 (WebSocket 처리 개선)
 │
-├── app.py                      # FastAPI main application
-│                               # FastAPI 메인 애플리케이션
-├── chat.py                     # Chat feature implementation
-│                               # 채팅 관련 기능 구현
-├── docpro.py                   # Document processing module
-│                               # 문서 처리 모듈
-├── dbcon.py                    # Database connection and model definition
-│                               # 데이터베이스 연결 및 모델 정의
-└── requirements.txt            # Project dependency list
-                                # 프로젝트 의존성 목록
+├── .env                        # 환경 변수 설정
+├── app.py                      # FastAPI 메인 애플리케이션 (대화 기록 API 추가)
+├── requirements.txt            # 프로젝트 의존성 목록
+├── users.json                  # 사용자 정보 데이터
+├── directory.txt               # 디렉토리 구조 문서
+└── README.md                   # 프로젝트 설명 문서
 ```
 
 ## 📚 Key Module Descriptions / 주요 모듈 설명
@@ -212,41 +234,49 @@ PROGEN/
 <details>
 <summary><b>app.py</b></summary>
 
-FastAPI-based main application file, including route definitions, middleware settings, and WebSocket endpoints.
-
-FastAPI 기반의 메인 애플리케이션 파일로, 라우트 정의, 미들웨어 설정, WebSocket 엔드포인트 등을 포함합니다.
+FastAPI 기반의 메인 애플리케이션 파일로, 라우트 정의, 미들웨어 설정, WebSocket 엔드포인트 등을 포함합니다. 최근 대화 기록 조회 API가 추가되었습니다.
 </details>
 
 <details>
-<summary><b>docpro.py</b></summary>
+<summary><b>backend/chat.py</b></summary>
 
-A module that processes various document formats (PDF, HWP, DOCX, Excel, etc.) to extract text. It provides dedicated processing functions for each file format.
-
-다양한 문서 형식(PDF, HWP, DOCX, Excel 등)을 처리하여 텍스트를 추출하는 모듈입니다. 각 파일 형식별로 전용 처리 함수를 제공합니다.
+AI 모델과의 대화를 관리하는 모듈로, 메시지 처리, 세션 관리, AI 모델 통합 등의 기능을 제공합니다. ChatManager와 ChatSession 클래스를 통해 대화 상태를 관리합니다.
 </details>
 
 <details>
-<summary><b>chat.py</b></summary>
+<summary><b>backend/dbm.py</b></summary>
 
-A module that manages conversations with AI models, providing message processing, session management, and AI model integration.
-
-AI 모델과의 대화를 관리하는 모듈로, 메시지 처리, 세션 관리, AI 모델 통합 등의 기능을 제공합니다.
-</details>
-
-<details>
-<summary><b>dbcon.py</b></summary>
-
-Defines PostgreSQL database connections and ORM models. It uses SQLAlchemy to manage tables such as User, Session, Message, Memory, etc.
-
-PostgreSQL 데이터베이스 연결 및 ORM 모델을 정의합니다. SQLAlchemy를 사용하여 User, Session, Message, Memory 등의 테이블을 관리합니다.
+데이터베이스 관리 인터페이스로, 사용자(UserManager), 세션(SessionManager), 메시지(MessageManager), 메모리(MemoryManager) 등의 데이터 관리를 담당합니다.
 </details>
 
 <details>
 <summary><b>backend/login.py</b></summary>
 
-Implements JWT-based user authentication and permission management.
+JWT 기반의 사용자 인증 및 권한 관리 기능을 구현합니다. 로그인, 토큰 검증, 권한 확인 등의 기능을 제공합니다.
+</details>
 
-JWT 기반의 사용자 인증 및 권한 관리 기능을 구현합니다.
+<details>
+<summary><b>backend/prop.py</b></summary>
+
+문서 처리 및 텍스트 정제 기능을 제공합니다. 다양한 형식의 문서에서 텍스트를 추출하고 처리하는 기능을 담당합니다.
+</details>
+
+<details>
+<summary><b>backend/utils/chat/ai_models.py</b></summary>
+
+AI 모델 연동을 관리하는 클래스입니다. Claude, Gemini, Meta(로컬 LLM) 모델과의 통합을 제공하며, 응답 생성 및 스트리밍 처리를 담당합니다.
+</details>
+
+<details>
+<summary><b>backend/utils/chat/handlers.py</b></summary>
+
+WebSocket을 통한 메시지 처리 핸들러를 구현합니다. 실시간 대화 처리와 관련된 기능을 담당합니다.
+</details>
+
+<details>
+<summary><b>backend/utils/db/models.py</b></summary>
+
+데이터베이스 모델을 정의합니다. User, Session, Message, Memory 등의 테이블 구조와 관계를 정의하고 있습니다.
 </details>
 
 ## 🔌 API Endpoints / API 엔드포인트
@@ -254,11 +284,16 @@ JWT 기반의 사용자 인증 및 권한 관리 기능을 구현합니다.
 ### Web Pages / 웹 페이지
 * `GET /`: Login page / 로그인 페이지
 * `GET /home`: Main homepage / 메인 홈페이지
+* `GET /prop`: Document processing page / 문서 처리 페이지
 
 ### Authentication API / 인증 API
 * `POST /api/login`: User login / 사용자 로그인
 * `GET /api/me`: View current user info / 현재 사용자 정보 조회
 * `GET /api/admin/users`: View all user list (admin only) / 모든 사용자 목록 조회 (관리자 전용)
+
+### Chat API / 채팅 API
+* `GET /api/chat/recent-sessions`: View recent chat sessions / 최근 대화 세션 목록 조회
+* `POST /api/chat/session/{session_id}/status`: Update chat session status / 대화 세션 상태 업데이트
 
 ### WebSocket
 * `WebSocket /chat`: Real-time chat connection / 실시간 채팅 연결
@@ -308,11 +343,11 @@ JWT 기반의 사용자 인증 및 권한 관리 기능을 구현합니다.
   </tr>
   <tr>
     <td><b>sessions</b></td>
-    <td>Chat session information (session_id, user_id, model, system_prompt, created_at, last_updated, active) / 채팅 세션 정보 (session_id, user_id, model, system_prompt, created_at, last_updated, active)</td>
+    <td>Chat session information (session_id, user_id, model, title, system_prompt, created_at, last_updated, active) / 채팅 세션 정보 (session_id, user_id, model, title, system_prompt, created_at, last_updated, active)</td>
   </tr>
   <tr>
     <td><b>messages</b></td>
-    <td>Chat messages (message_id, session_id, role, content, timestamp) / 채팅 메시지 (message_id, session_id, role, content, timestamp)</td>
+    <td>Chat messages (message_id, session_id, role, content, model, timestamp) / 채팅 메시지 (message_id, session_id, role, content, model, timestamp)</td>
   </tr>
   <tr>
     <td><b>memories</b></td>
