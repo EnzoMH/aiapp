@@ -41,7 +41,7 @@
     <!-- 메인 콘텐츠 -->
     <main class="flex-grow flex overflow-hidden">
         <!-- 사이드바 -->
-        <aside class="w-64 bg-white border-r border-gray-200 hidden md:block p-4 overflow-y-auto flex-shrink-0">
+        <aside class="w-64 bg-white border-r border-gray-200 p-4 overflow-y-auto flex-shrink-0">
             <div class="mb-6">
                 <button id="newChatBtn" class="w-full flex items-center justify-center gap-2 px-4 py-2 border border-gray-300 rounded-md hover:bg-gray-50">
                     <i class="fas fa-plus"></i>
@@ -135,7 +135,7 @@
                 </div>
             </div>
             
-            <div id="chatHistoryPanel" class="absolute right-0 top-0 h-full w-80 bg-white border-l border-gray-200 shadow-lg z-30 transform transition-transform duration-300" style="transform: translateX(100%);">
+            <div id="chatHistoryPanel" class="fixed left-0 top-0 h-full w-80 bg-white border-r border-gray-200 shadow-lg z-30 transform transition-transform duration-300" style="transform: translateX(-100%);">
                 <div class="p-4 border-b border-gray-200 flex justify-between items-center">
                     <h3 class="text-lg font-semibold">대화 기록</h3>
                     <button id="closeChatHistory" class="text-gray-500 hover:text-gray-700">
@@ -163,19 +163,22 @@
     
     <!-- 대화 기록 미리보기 템플릿 추가 -->
     <template id="historyPreviewTemplate">
-        <div class="group">
-            <div class="chat-history-item hover:bg-gray-100 group-hover:border-gray-300 relative">
-                <div class="flex justify-between items-center">
-                    <span class="text-sm font-medium text-gray-800"></span>
-                    <span class="text-xs px-2 py-1 rounded-full bg-gray-100 text-gray-600"></span>
-                </div>
-                <div class="text-sm text-gray-600 truncate mt-1"></div>
+    <div class="group">
+        <div class="chat-history-item hover:bg-gray-100 group-hover:border-gray-300 relative">
+            <div class="flex justify-between items-center">
+                <span class="text-sm font-medium text-gray-800"></span>
+                <span class="text-xs px-2 py-1 rounded-full bg-gray-100 text-gray-600"></span>
+            </div>
+            <div class="text-sm text-gray-600 truncate mt-1"></div>
+            <div class="flex justify-between items-center mt-1">
+                <span class="text-xs text-gray-500 session-status"></span>
                 <button class="delete-history-btn absolute top-2 right-2 opacity-0 group-hover:opacity-100 text-gray-400 hover:text-red-500 transition-opacity">
                     <i class="fas fa-trash-alt"></i>
                 </button>
             </div>
         </div>
-    </template>
+    </div>
+</template>
     
     <!-- 날짜 구분선 템플릿 -->
     <template id="dateDividerTemplate">

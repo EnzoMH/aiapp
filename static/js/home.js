@@ -29,6 +29,36 @@ document.addEventListener('DOMContentLoaded', function() {
         
         // UI 초기화
         initHomeUI();
+        
+        // 대화 기록 패널 위치 초기화
+        const chatHistoryPanel = document.getElementById('chatHistoryPanel');
+        if (chatHistoryPanel) {
+            chatHistoryPanel.style.transform = 'translateX(-100%)';
+        }
+    }
+
+    // 테스트 코드 추가
+    window.testChatHistoryPanel = function() {
+        const panel = document.getElementById('chatHistoryPanel');
+        if (!panel) {
+            console.error('chatHistoryPanel 요소를 찾을 수 없습니다');
+            return;
+        }
+        
+        console.log('패널 현재 상태:', {
+            display: panel.style.display,
+            transform: panel.style.transform,
+            visibility: panel.style.visibility,
+            opacity: panel.style.opacity,
+            zIndex: panel.style.zIndex
+        });
+        
+        // 강제로 표시 시도
+        panel.style.transform = 'translateX(0)';
+        console.log('패널 표시 시도 후 상태:', panel.style.transform);
+        
+        // 대화 기록 로드 시도
+        loadChatHistories();
     }
     
     // 자동 저장 시작
@@ -516,55 +546,6 @@ function handleWebSocketMessage(event) {
     }
 }
 
-// 더 높은 z-index 적용
-const chatHistoryPanel = document.getElementById('chatHistoryPanel');
-if (chatHistoryPanel) {
-    chatHistoryPanel.className = 'fixed left-0 top-0 h-full w-80 bg-white border-r border-gray-200 shadow-lg z-50 transform transition-transform duration-300';
-    chatHistoryPanel.style.transform = 'translateX(-100%)'; 
-}
-
-// 컨텐츠 스타일 개선
-function createChatHistoryPanel() {
-    const panel = document.createElement('div');
-    panel.id = 'chatHistoryPanel';
-    panel.className = 'fixed right-0 top-0 h-full w-80 bg-white border-l border-gray-200 shadow-lg z-30 transform transition-transform duration-300';
-    panel.style.transform = 'translateX(100%)';  // 초기에는 숨김
-    
-    // 날짜 포맷팅
-    const date = new Date(history.created_at);
-    const timeStr = date.toLocaleTimeString('ko-KR', { 
-        hour: '2-digit', 
-        minute: '2-digit'
-    });
-    
-    // 미리보기 텍스트 가공 (너무 길면 자르기)
-    const previewText = history.preview ? 
-        (history.preview.length > 65 ? history.preview.substring(0, 65) + '...' : history.preview) :
-        "새 대화";
-    
-    item.innerHTML = `
-        <div class="flex justify-between items-start">
-            <span class="text-sm font-medium text-gray-800 truncate max-w-[70%]">${previewText}</span>
-            <span class="text-xs text-gray-500">${timeStr}</span>
-        </div>
-        <div class="flex justify-between items-center mt-2">
-            <span class="text-xs text-gray-500">${history.message_count || 0}개 메시지</span>
-            <span class="text-xs px-1.5 py-0.5 rounded bg-gray-200 text-gray-700">${history.model}</span>
-        </div>
-        <button class="delete-history-btn absolute top-2 right-2 opacity-0 group-hover:opacity-100 text-gray-400 hover:text-red-500 transition-opacity">
-            <i class="fas fa-trash-alt"></i>
-        </button>
-    `;
-    
-    // 삭제 버튼에 이벤트 리스너 추가
-    const deleteBtn = item.querySelector('.delete-history-btn');
-    if (deleteBtn) {
-        deleteBtn.addEventListener('click', (e) => deleteSession(history.session_id, e));
-    }
-    
-    return item;
-}
-
 // 대화 기록 패널 생성 함수 수정
 function createChatHistoryPanel() {
     const chatArea = document.querySelector('.flex-grow');
@@ -572,8 +553,8 @@ function createChatHistoryPanel() {
 
     const panel = document.createElement('div');
     panel.id = 'chatHistoryPanel';
-    panel.className = 'fixed right-0 top-0 h-full w-80 bg-white border-l border-gray-200 shadow-lg z-30 transform transition-transform duration-300';
-    panel.style.transform = 'translateX(100%)';  // 초기에는 숨김
+    panel.className = 'fixed left-0 top-0 h-full w-80 bg-white border-r border-gray-200 shadow-lg z-30 transform transition-transform duration-300';
+    panel.style.transform = 'translateX(-100%)';  // 초기에는 숨김
     
     panel.innerHTML = `
         <div class="p-4 border-b border-gray-200 flex justify-between items-center">
@@ -1032,6 +1013,12 @@ function startNewChat() {
     
     isProcessing = false;
     enableMessageInput();
+    
+    // 대화 기록 패널이 열려있으면 최신 상태로 갱신
+    const panel = document.getElementById('chatHistoryPanel');
+    if (panel && panel.style.transform === 'translateX(0)') {
+        loadChatHistories();
+    }
 }
 
 // 웰컴 메시지 추가
@@ -1226,26 +1213,75 @@ const maxReconnectAttempts = 5;
 
 // 대화 기록 패널 토글 함수 수정
 function toggleChatHistory() {
-    console.log('토글 대화 기록 패널');
+    console.log('토글 대화 기록 패널 호출됨');
     const panel = document.getElementById('chatHistoryPanel');
+    
     if (!panel) {
-        console.error('대화 기록 패널을 찾을 수 없습니다');
+        console.error('chatHistoryPanel 요소를 찾을 수 없습니다');
         return;
     }
     
-    const isHidden = panel.style.transform === 'translateX(100%)' || panel.style.transform === '';
-    panel.style.transform = isHidden ? 'translateX(0)' : 'translateX(100%)';
+    console.log('현재 transform 상태:', panel.style.transform);
+    
+    const isHidden = panel.style.transform === 'translateX(-100%)' || panel.style.transform === '';
+    console.log('isHidden 상태:', isHidden);
+    
+    panel.style.transform = isHidden ? 'translateX(0)' : 'translateX(-100%)';
+    console.log('변경 후 transform 상태:', panel.style.transform);
     
     if (isHidden) {
-        // 패널이 표시될 때 대화 기록 로드
+        console.log('대화 기록 로드 함수 호출');
         loadChatHistories();
     }
 }
 
+function showMockChatHistory() {
+    const historyList = document.getElementById('chatHistoryList');
+    if (!historyList) {
+        console.error('chatHistoryList 요소를 찾을 수 없습니다');
+        return;
+    }
+    
+    const mockData = [
+        { title: '테스트 대화 1', model: 'meta', created_at: new Date().toISOString(), session_id: 'test1' },
+        { title: '테스트 대화 2', model: 'claude', created_at: new Date().toISOString(), session_id: 'test2' },
+        { title: '테스트 대화 3', model: 'gemini', created_at: new Date().toISOString(), session_id: 'test3' }
+    ];
+    
+    historyList.innerHTML = '';
+    mockData.forEach(session => {
+        const sessionItem = document.createElement('div');
+        sessionItem.className = 'chat-history-item p-2 hover:bg-gray-100 rounded-md';
+        const date = new Date(session.created_at).toLocaleString();
+        
+        sessionItem.innerHTML = `
+            <div class="flex justify-between items-center">
+                <span class="text-sm font-medium text-gray-800">${session.title}</span>
+                <span class="text-xs px-2 py-1 rounded-full bg-gray-100 text-gray-600">${session.model}</span>
+            </div>
+            <div class="text-xs text-gray-500 mt-1">${date}</div>
+        `;
+        
+        historyList.appendChild(sessionItem);
+    });
+    
+    // 패널 표시 시도
+    const panel = document.getElementById('chatHistoryPanel');
+    if (panel) {
+        panel.style.transform = 'translateX(0)';
+    }
+}
+
+// 대화 기록 불러오기 함수 최적화
 // 대화 기록 불러오기 함수 최적화
 async function loadChatHistories() {
+    console.log('loadChatHistories 함수 실행');
     const historyList = document.getElementById('chatHistoryList');
-    if (!historyList) return;
+    
+    if (!historyList) {
+        console.error('chatHistoryList 요소를 찾을 수 없습니다');
+        return;
+    }
 
     // 로딩 표시
     historyList.innerHTML = '<div class="p-4 text-center text-gray-500"><div class="spinner mx-auto mb-2"></div>대화 기록을 불러오는 중...</div>';
@@ -1257,30 +1293,86 @@ async function loadChatHistories() {
             return;
         }
 
-        // API 호출
+        console.log('대화 기록 API 호출 시도');
+        // API 직접 디버깅
         const response = await fetch('/api/chat/recent-sessions', {
             headers: {
                 'Authorization': `Bearer ${token}`
             }
         });
 
+        console.log('API 응답 상태:', response.status);
+        
         if (!response.ok) {
+            const errorText = await response.text();
+            console.error('API 오류 응답:', errorText);
             throw new Error('대화 기록을 불러올 수 없습니다');
         }
 
         const sessions = await response.json();
+        console.log('받은 세션 데이터:', sessions);
+        
+        if (!Array.isArray(sessions)) {
+            console.error('세션 데이터가 배열이 아닙니다:', sessions);
+            historyList.innerHTML = '<div class="p-4 text-center text-red-500">잘못된 데이터 형식</div>';
+            return;
+        }
         
         if (sessions.length === 0) {
             historyList.innerHTML = '<div class="p-4 text-center text-gray-500">저장된 대화 기록이 없습니다</div>';
             return;
         }
         
-        // 그룹화 및 렌더링
-        const groupedSessions = groupSessionsByDate(sessions);
-        renderGroupedSessions(groupedSessions, historyList);
+        // 단순화된 렌더링으로 시작
+        historyList.innerHTML = '';
+        sessions.forEach(session => {
+            const sessionItem = document.createElement('div');
+            sessionItem.className = 'chat-history-item p-2 hover:bg-gray-100 rounded-md';
+            sessionItem.onclick = () => loadChatSession(session.session_id);
+            
+            const title = session.title || "새 대화";
+            const date = new Date(session.created_at).toLocaleString();
+            
+            sessionItem.innerHTML = `
+                <div class="flex justify-between items-center">
+                    <span class="text-sm font-medium text-gray-800">${title}</span>
+                    <span class="text-xs px-2 py-1 rounded-full bg-gray-100 text-gray-600">${session.model || 'AI'}</span>
+                </div>
+                <div class="text-xs text-gray-500 mt-1">${date}</div>
+            `;
+            
+            historyList.appendChild(sessionItem);
+        });
     } catch (error) {
         console.error('대화 기록 로드 오류:', error);
-        historyList.innerHTML = `<div class="p-4 text-center text-red-500">대화 기록을 불러올 수 없습니다: ${error.message}</div>`;
+        console.log('목업 데이터로 대체합니다');
+        
+        // 여기에 5번 목업 데이터 코드 추가
+        const mockData = [
+            { title: '테스트 대화 1', model: 'meta', created_at: new Date().toISOString(), session_id: 'test1' },
+            { title: '테스트 대화 2', model: 'claude', created_at: new Date().toISOString(), session_id: 'test2' },
+            { title: '테스트 대화 3', model: 'gemini', created_at: new Date().toISOString(), session_id: 'test3' }
+        ];
+        
+        historyList.innerHTML = '';
+        mockData.forEach(session => {
+            const sessionItem = document.createElement('div');
+            sessionItem.className = 'chat-history-item p-2 hover:bg-gray-100 rounded-md';
+            const date = new Date(session.created_at).toLocaleString();
+            
+            sessionItem.innerHTML = `
+                <div class="flex justify-between items-center">
+                    <span class="text-sm font-medium text-gray-800">${session.title}</span>
+                    <span class="text-xs px-2 py-1 rounded-full bg-gray-100 text-gray-600">${session.model}</span>
+                </div>
+                <div class="text-xs text-gray-500 mt-1">${date}</div>
+            `;
+            
+            historyList.appendChild(sessionItem);
+        });
+        
+        // 기존 에러 메시지 대신 목업 데이터 표시 완료 메시지
+        console.log('목업 데이터 표시 완료');
     }
 }
 
@@ -1342,11 +1434,14 @@ function renderGroupedSessions(groups, container) {
         // 해당 날짜의 세션들 렌더링
         groups[dateGroup].forEach(session => {
             const sessionItem = document.createElement('div');
-            sessionItem.className = 'chat-history-item hover:bg-gray-100 rounded-md';
+            // 현재 활성화된 세션인지 확인
+            const isActive = session.active && session.session_id === currentSessionId;
+            sessionItem.className = `chat-history-item hover:bg-gray-100 rounded-md ${isActive ? 'active' : ''}`;
             sessionItem.onclick = () => loadChatSession(session.session_id);
             
             const title = session.title || "새 대화";
             const modelTag = getModelTag(session.model);
+            const statusText = isActive ? "현재 대화 중" : (session.active ? "활성화됨" : "");
             
             sessionItem.innerHTML = `
                 <div class="p-2">
@@ -1355,6 +1450,9 @@ function renderGroupedSessions(groups, container) {
                         <span class="model-tag ${session.model}">${modelTag}</span>
                     </div>
                     <div class="text-xs text-gray-500 mt-1">${formatDateTime(session.created_at)}</div>
+                    <div class="flex justify-between items-center mt-1">
+                        <span class="text-xs text-gray-500 ${isActive ? 'text-blue-500 font-medium' : ''}">${statusText}</span>
+                    </div>
                 </div>
             `;
             
@@ -1431,6 +1529,9 @@ async function loadChatSession(sessionId) {
         // UI에 모델 버튼 상태 업데이트
         updateModelButtonState(currentModel);
 
+        // 세션 활성화 상태로 변경
+        await updateSessionStatus(sessionId, true);
+
         // 메시지 컨테이너 생성
         const messageContainer = document.createElement('div');
         messageContainer.className = 'message-container';
@@ -1491,6 +1592,9 @@ async function loadChatSession(sessionId) {
         scrollToBottom();
         
         showToast('success', '대화를 불러왔습니다');
+
+        // 세션 활성화
+        await updateSessionStatus(sessionId, true);
     } catch (error) {
         console.error('대화 세션 로드 오류:', error);
         showToast('error', `대화를 불러올 수 없습니다: ${error.message}`);

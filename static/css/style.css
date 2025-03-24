@@ -97,10 +97,6 @@ button:active {
     padding: 0.5rem 1rem;
 }
 
-.message-content {
-    flex-grow: 1;
-    overflow-wrap: break-word;
-}
 
 .message.system {
     background-color: #f3f4f6;
@@ -117,7 +113,6 @@ button:active {
     padding: 1rem;
     overflow-y: auto;
     scroll-behavior: smooth;
-    height: 100%;
 }
 
 #chat-messages .welcome-message {
@@ -135,15 +130,17 @@ button:active {
 .spinner {
     width: 24px;
     height: 24px;
-    border: 3px solid rgba(59, 130, 246, 0.3);
+    border: 3px solid rgba(99, 102, 241, 0.3);
     border-radius: 50%;
-    border-top-color: #3b82f6;
-    animation: spin 1s linear infinite;
-    display: inline-block;
+    border-top-color: #6366f1;
+    animation: spin 1s ease-in-out infinite;
 }
 
 @keyframes spin {
-    to {
+    0% {
+        transform: rotate(0deg);
+    }
+    100% {
         transform: rotate(360deg);
     }
 }
@@ -288,35 +285,36 @@ textarea {
 /* 대화 기록 패널 애니메이션 */
 #chatHistoryPanel {
     position: fixed;
-    right: 0;
+    left: 0;
     top: 0;
     height: 100vh;
     width: 320px;
     background: white;
-    box-shadow: -2px 0 5px rgba(0,0,0,0.1);
+    box-shadow: 2px 0 5px rgba(0,0,0,0.1);
     z-index: 1000;
     transition: transform 0.3s ease;
-    overflow: hidden;
 }
 
-/* 개선된 대화 기록 아이템 스타일 */
 .chat-history-item {
     border-bottom: 1px solid #e5e7eb;
-    padding: 0.75rem 1rem;
+    padding: 1rem;
     cursor: pointer;
-    transition: all 0.2s ease;
-    margin-bottom: 0.25rem;
-    border-radius: 0.25rem;
+    transition: background-color 0.2s;
 }
 
 .chat-history-item:hover {
     background-color: #f3f4f6;
-    transform: translateY(-1px);
-    box-shadow: 0 1px 2px rgba(0,0,0,0.05);
 }
 
-.chat-history-item:active {
-    transform: translateY(0);
+/* 활성화된 세션 스타일 */
+.chat-history-item.active {
+    border-left: 4px solid #3b82f6;
+    background-color: #eff6ff;
+}
+
+.chat-history-item .timestamp {
+    font-size: 0.875rem;
+    color: #6b7280;
 }
 
 .chat-history-item .preview {
@@ -324,68 +322,4 @@ textarea {
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-    margin-top: 0.25rem;
-}
-
-/* 날짜 구분선 */
-.date-divider {
-    display: flex;
-    align-items: center;
-    margin: 1rem 0;
-    color: #6b7280;
-    font-size: 0.75rem;
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-}
-
-.date-divider:before,
-.date-divider:after {
-    content: "";
-    flex-grow: 1;
-    background-color: #e5e7eb;
-    height: 1px;
-    margin: 0 0.5rem;
-}
-
-/* 모델 태그 */
-.model-tag {
-    font-size: 0.75rem;
-    padding: 0.125rem 0.5rem;
-    border-radius: 9999px;
-    background-color: #f3f4f6;
-    color: #6b7280;
-    display: inline-flex;
-    align-items: center;
-}
-
-.model-tag.meta {
-    background-color: #e0f2fe;
-    color: #0369a1;
-}
-
-.model-tag.claude {
-    background-color: #fef3c7;
-    color: #92400e;
-}
-
-.model-tag.gemini {
-    background-color: #dcfce7;
-    color: #166534;
-}
-
-/* 메시지 없음 상태 */
-.empty-state {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    padding: 2rem;
-    color: #6b7280;
-    text-align: center;
-}
-
-.empty-state i {
-    font-size: 2rem;
-    margin-bottom: 1rem;
-    color: #d1d5db;
 }

@@ -135,7 +135,7 @@ class SessionManager:
             return None
             
         # 업데이트 가능한 필드 목록
-        updatable_fields = ['model', 'system_prompt', 'active']
+        updatable_fields = ['model', 'system_prompt', 'active', 'title']
         
         # 제공된 필드만 업데이트
         for field, value in kwargs.items():
@@ -155,7 +155,8 @@ class SessionManager:
             "system_prompt": session.system_prompt,
             "created_at": session.created_at.isoformat(),
             "last_updated": session.last_updated.isoformat(),
-            "active": session.active
+            "active": session.active,
+            "title": session.title
         }
     
     @staticmethod
