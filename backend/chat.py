@@ -381,8 +381,9 @@ class ChatManager:
         
         return is_long or has_complex_keywords
     
-    async def get_recent_sessions(self, user_id: str, limit: int = 10) -> List[Dict[str, Any]]:
-        """사용자의 최근 대화 세션 목록 조회"""
+    # 세션 미리보기 정보 개선
+    async def get_recent_sessions(self, user_id: str, limit: int = 30) -> List[Dict[str, Any]]:
+        """사용자의 최근 대화 세션 목록 조회 (개선)"""
         db = SessionLocal()
         try:
             # 세션 목록 조회 (최신순)
@@ -392,19 +393,33 @@ class ChatManager:
             
             result = []
             for session in sessions:
-                # 세션별 미리보기 메시지 가져오기
-                preview_message = db.query(DBMessage).filter(
-                    DBMessage.session_id == session.session_id
+                # 세션별 첫 사용자 메시지 가져오기 (제목용)
+                first_user_message = db.query(DBMessage).filter(
+                    DBMessage.session_id == session.session_id,
+                    DBMessage.role == "user"
                 ).order_by(DBMessage.timestamp.asc()).first()
                 
+                # 세션별 마지막 메시지 가져오기 (미리보기용)
+                last_message = db.query(DBMessage).filter(
+                    DBMessage.session_id == session.session_id
+                ).order_by(DBMessage.timestamp.desc()).first()
+                
+                # 제목 생성 (없으면 첫 메시지로부터)
+                title = session.title
+                if not title and first_user_message:
+                    title = first_user_message.content[:30] + ("..." if len(first_user_message.content) > 30 else "")
+                elif not title:
+                    title = "새 대화"
+                    
                 # 결과 구성
                 result.append({
                     "session_id": str(session.session_id),
+                    "title": title,
                     "model": session.model,
                     "created_at": session.created_at.isoformat(),
                     "last_updated": session.last_updated.isoformat(),
                     "active": session.active,
-                    "preview": preview_message.content[:100] if preview_message else "새 대화"
+                    "preview": last_message.content[:100] + ("..." if len(last_message.content) > 100 else "") if last_message else "대화 내용 없음"
                 })
             
             return result
