@@ -5,38 +5,48 @@ PROGEN/
 │   ├── js/
 │   │   ├── home.js             # 홈페이지 메인 스크립트 (모듈화된 구조)
 │   │   ├── login.js            # 로그인 페이지 스크립트
-│   │   └── homeutil/           # 홈페이지 유틸리티 모듈
-│   │       ├── websocket.js    # WebSocket 통신 관리
-│   │       ├── auth.js         # 인증 관리
-│   │       ├── chat-history.js # 대화 기록 관리
-│   │       ├── ui-manager.js   # UI 관리
-│   │       └── file-handler.js # 파일 업로드/처리 관리
+│   │   ├── crawl.js            # 크롤링 인터페이스 스크립트
+│   │   ├── homeutil/           # 홈페이지 유틸리티 모듈
+│   │   │   ├── websocket.js    # WebSocket 통신 관리
+│   │   │   ├── auth.js         # 인증 관리
+│   │   │   ├── chat-history.js # 대화 기록 관리
+│   │   │   ├── ui-manager.js   # UI 관리
+│   │   │   └── file-handler.js # 파일 업로드/처리 관리
+│   │   └── crawlutil/          # 크롤링 유틸리티 모듈
+│   │       ├── websocket.js    # 크롤링 WebSocket 통신 관리
+│   │       ├── table-manager.js # 결과 테이블 관리
+│   │       └── ui-manager.js   # 크롤링 UI 관리
 │   ├── image/                  # 이미지 리소스 디렉토리
 │   │   ├── meta.png            # Meta 모델 아이콘
 │   │   ├── claude.png          # Claude 모델 아이콘
 │   │   └── gemini.png          # Gemini 모델 아이콘
 │   ├── home.html               # 홈페이지 (대화 기록 UI 추가)
+│   ├── crawl.html              # 크롤링 인터페이스 페이지
 │   └── login.html              # 로그인 페이지
 │
 ├── backend/                     # 백엔드 코어 디렉토리
 │   ├── __init__.py             # 패키지 초기화 파일
-│   ├── crawl.py                # 크롤링 관련 인터페이스
+│   ├── crawl.py                # 크롤링 관련 인터페이스 및 API 엔드포인트
 │   ├── chat.py                 # 채팅 관련 인터페이스
 │   ├── dbm.py                  # 데이터베이스 관리 인터페이스 (세션/메시지 관리 기능 추가)
 │   ├── prop.py                 # 문서 처리 및 제안서 인터페이스
 │   ├── login.py                # 로그인/인증 관련 유틸리티
 │   └── utils/                  # 유틸리티 함수 디렉토리
 │       ├── __init__.py         # 패키지 초기화 파일
-│       ├── json_encoder.py     # JSON 인코더 (UUID 직렬화 처리) [신규]
+│       ├── json_encoder.py     # JSON 인코더 (UUID 직렬화 처리)
 │       ├── agent/              # AI 에이전트 관련 파일
 │       │   ├── __init__.py
 │       │   └── ai.py           # AI 관련 핵심 클래스 및 함수
 │       ├── crawl/              # 크롤러 관련 파일
 │       │   ├── __init__.py
-│       │   └── crawl.py        # 크롤링 관련 함수
+│       │   ├── constants.py    # 크롤링 상수 정의
+│       │   ├── crawler_core.py # 크롤러 핵심 기능 구현
+│       │   ├── error_handler.py # 크롤링 오류 처리
+│       │   └── http_client.py  # HTTP 통신 클라이언트
 │       ├── db/                 # 데이터베이스 관련 파일
 │       │   ├── __init__.py
 │       │   ├── models.py       # 데이터베이스 모델 정의 (세션/메시지 모델 추가)
+│       │   ├── connection.py   # 데이터베이스 연결 설정
 │       │   └── utils.py        # 데이터베이스 유틸리티 함수
 │       ├── prop/               # 문서 처리 및 제안서 관련 파일
 │       │   ├── __init__.py
@@ -49,9 +59,12 @@ PROGEN/
 │           ├── ai_models.py    # AI 모델 관리 클래스
 │           └── handlers.py     # 메시지 처리 핸들러 (WebSocket 처리 개선)
 │
+├── test/                       # 테스트 및 데이터 디렉토리
+│   └── crawling_progress_*.json # 크롤링 진행 상태 및 결과 파일
+│
 ├── .env                        # 환경 변수 설정
-├── app.py                      # FastAPI 메인 애플리케이션 (대화 기록 API 추가)
-├── dbcon.py                    # 데이터베이스 연결 설정 (곧 backend/utils/db로 이동 예정)
-├── directory.txt               # 디렉토리 구조 문서
+├── app.py                      # FastAPI 메인 애플리케이션 (크롤링 API 및 웹소켓 추가)
 ├── requirements.txt            # 프로젝트 의존성 목록
-└── users.json                  # 사용자 정보 데이터
+├── users.json                  # 사용자 정보 데이터
+├── directory.txt               # 디렉토리 구조 문서
+└── README.md                   # 프로젝트 설명 문서
