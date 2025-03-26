@@ -18,43 +18,33 @@ export class AuthManager {
 
     static async login(username, password) {
         try {
-            const formData = new URLSearchParams();
+            const formData = new FormData();
             formData.append('username', username);
             formData.append('password', password);
             
             const response = await fetch('/api/login', {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/x-www-form-urlencoded',
-                },
                 body: formData
             });
             
-            const data = await response.json();
-            
             if (!response.ok) {
-                throw new Error(data.detail || '로그인에 실패했습니다.');
+                const error = await response.json();
+                return {
+                    success: false,
+                    error: error.detail || '로그인에 실패했습니다.'
+                };
             }
             
-            // 로그인 성공
-            localStorage.setItem('access_token', data.access_token);
-            
-            // JWT 토큰에서 사용자 정보 추출
-            const tokenPayload = AuthManager.parseJwt(data.access_token);
-            localStorage.setItem('user_id', tokenPayload.sub);
-            localStorage.setItem('user_role', tokenPayload.role);
-            
+            const data = await response.json();
             return {
                 success: true,
-                token: data.access_token,
-                user_id: tokenPayload.sub,
-                role: tokenPayload.role
+                access_token: data.access_token
             };
         } catch (error) {
             console.error('Login error:', error);
             return {
                 success: false,
-                error: error.message
+                error: '서버 연결에 문제가 있습니다.'
             };
         }
     }
@@ -66,20 +56,25 @@ export class AuthManager {
         window.location.href = '/';
     }
 
-    // JWT 토큰 디코딩 함수
-    static parseJwt(token) {
+    static getUserInfo() {
+        const token = localStorage.getItem('access_token');
+        if (!token) return null;
+        
         try {
-            const base64Url = token.split('.')[1];
-            const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
-            const jsonPayload = decodeURIComponent(atob(base64).split('').map(function(c) {
-                return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
-            }).join(''));
-            
-            return JSON.parse(jsonPayload);
-        } catch (e) {
-            console.error('JWT 파싱 오류:', e);
-            return { sub: '', role: '' };
+            const payload = JSON.parse(atob(token.split('.')[1]));
+            return {
+                id: payload.sub,
+                role: payload.role
+            };
+        } catch (error) {
+            console.error('Error parsing token:', error);
+            return null;
         }
+    }
+
+    static isAdmin() {
+        const userInfo = this.getUserInfo();
+        return userInfo && userInfo.role === 'admin';
     }
 
     async loadUserInfo() {
@@ -107,11 +102,6 @@ export class AuthManager {
             console.error('사용자 정보 로드 오류:', error);
             return false;
         }
-    }
-
-    // 관리자 권한 확인
-    isAdmin() {
-        return this.userRole === 'admin';
     }
 
     // 사용자 권한 확인

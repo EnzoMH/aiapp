@@ -34,6 +34,9 @@ from sqlalchemy.orm import Session
 from backend.utils.db import engine, SessionLocal, Base, get_db, test_connection
 from backend.dbm import UserManager, SessionManager, MessageManager, MemoryManager
 
+# 크롤링 라우터 import
+from backend.crawl import router as crawl_router
+
 # .env 파일 로드
 load_dotenv()
 
@@ -66,6 +69,9 @@ app.json_encoder = CustomJSONEncoder
 app.mount("/static", StaticFiles(directory="static"), name="static")
 templates = Jinja2Templates(directory="static")
 
+# 크롤링 라우터 등록
+app.include_router(crawl_router, tags=["crawling"])
+
 # 매니저 초기화
 ACCESS_TOKEN_EXPIRE_MINUTES = 30
 ws_manager = WebSocketManager()
@@ -95,6 +101,10 @@ async def home(request: Request):
 @app.get("/prop", response_class=HTMLResponse) # 현재 html파일은 없음 
 async def prop(request: Request):
     return templates.TemplateResponse("prop.html", {"request": request})
+
+@app.get("/crawl", response_class=HTMLResponse)
+async def crawl(request: Request):
+    return templates.TemplateResponse("crawl.html", {"request": request})
 
 @app.post("/api/login")
 async def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
@@ -413,6 +423,49 @@ async def update_session_title(
     except Exception as e:
         print(f"Error updating session title: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
+
+# 크롤링용 웹소켓 엔드포인트
+@app.websocket("/ws")
+async def crawling_websocket_endpoint(websocket: WebSocket):
+    await websocket.accept()
+    client_id = id(websocket)
+    
+    try:
+        while True:
+            data = await websocket.receive_text()
+            # 클라이언트로부터의 메시지 처리
+            await handle_websocket_message(websocket, data)
+    except Exception as e:
+        logger.error(f"크롤링 WebSocket 오류: {str(e)}")
+    finally:
+        pass
+
+# 크롤링 웹소켓 메시지 처리
+async def handle_websocket_message(websocket: WebSocket, message: str):
+    try:
+        data = json.loads(message)
+        message_type = data.get("type")
+        
+        # 크롤링 라우터의 처리 함수 사용
+        from backend.crawl import start_crawling, stop_crawling, send_status_update
+        
+        if message_type == "start_crawling":
+            await start_crawling(websocket)
+        elif message_type == "stop_crawling":
+            await stop_crawling(websocket)
+        elif message_type == "get_status":
+            await send_status_update(websocket)
+            
+    except json.JSONDecodeError:
+        await websocket.send_json({
+            "type": "error",
+            "message": "잘못된 JSON 형식입니다."
+        })
+    except Exception as e:
+        await websocket.send_json({
+            "type": "error",
+            "message": f"처리 중 오류 발생: {str(e)}"
+        })
 
 if __name__ == "__main__":
     init()
