@@ -12,6 +12,7 @@ import os
 from dotenv import load_dotenv
 import jwt
 import json
+import logging
 
 # login utils import, 로그인 유틸 가져오기
 from backend.login import LoginUtils, UserRole
@@ -43,7 +44,9 @@ load_dotenv()
 from fastapi.responses import JSONResponse
 from backend.utils.json_encoder import CustomJSONEncoder
 
-
+# 로깅 설정
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
 
 # JWT 설정
 JWT_SECRET_KEY = os.getenv("JWT_SECRET_KEY")
@@ -425,7 +428,7 @@ async def update_session_title(
         raise HTTPException(status_code=500, detail=str(e))
 
 # 크롤링용 웹소켓 엔드포인트
-@app.websocket("/ws")
+@app.websocket("/crawl/ws")
 async def crawling_websocket_endpoint(websocket: WebSocket):
     await websocket.accept()
     client_id = id(websocket)

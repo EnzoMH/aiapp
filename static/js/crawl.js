@@ -13,15 +13,21 @@ document.addEventListener("DOMContentLoaded", function () {
     // WebSocket 관리 클래스 업데이트
     class WebSocketManager {
       constructor() {
-        this.reconnectAttempts = 0;
-        this.MAX_RECONNECT_ATTEMPTS = 5;
+        this.ws = null;
         this.isConnected = false;
+        this.reconnectAttempts = 0;
+        this.maxReconnectAttempts = 5;
+        this.reconnectDelay = 3000; // 재연결 시도 간격 (ms)
+        this.eventListeners = {};
         this.connect();
       }
   
       // 웹소켓 연결
       connect() {
-        this.ws = new WebSocket(`ws://${window.location.host}/ws`);
+        const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+        const wsUrl = `${wsProtocol}//${window.location.host}/crawl/ws`;
+        
+        this.ws = new WebSocket(wsUrl);
         this.setupEventHandlers();
       }
   
@@ -32,6 +38,12 @@ document.addEventListener("DOMContentLoaded", function () {
           this.isConnected = true;
           this.reconnectAttempts = 0;
           this.updateConnectionStatus(true);
+          this.updateStatus("서버에 연결되었습니다");
+          
+          // 서버에 현재 상태 요청
+          this.ws.send(JSON.stringify({
+            type: "get_status"
+          }));
         };
   
         this.ws.onmessage = (event) => {
@@ -176,12 +188,12 @@ document.addEventListener("DOMContentLoaded", function () {
   
       // 재연결 로직 강화
       async attemptReconnect() {
-        if (this.reconnectAttempts < this.MAX_RECONNECT_ATTEMPTS) {
+        if (this.reconnectAttempts < this.maxReconnectAttempts) {
           this.reconnectAttempts++;
           console.log(
-            `재연결 시도 ${this.reconnectAttempts}/${this.MAX_RECONNECT_ATTEMPTS}`
+            `재연결 시도 ${this.reconnectAttempts}/${this.maxReconnectAttempts}`
           );
-          await new Promise((resolve) => setTimeout(resolve, 3000)); // 3초 대기
+          await new Promise((resolve) => setTimeout(resolve, this.reconnectDelay));
           this.connect();
         }
       }
@@ -189,11 +201,11 @@ document.addEventListener("DOMContentLoaded", function () {
       async checkConnection() {
         if (
           !this.isConnected &&
-          this.reconnectAttempts < this.MAX_RECONNECT_ATTEMPTS
+          this.reconnectAttempts < this.maxReconnectAttempts
         ) {
           console.log(
             `재연결 시도 ${this.reconnectAttempts + 1}/${
-              this.MAX_RECONNECT_ATTEMPTS
+              this.maxReconnectAttempts
             }`
           );
           await this.connect();

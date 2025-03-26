@@ -13,12 +13,16 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from backend.utils.crawl.crawler_core import BidCrawlerTest
 from backend.utils.crawl.error_handler import CrawlerException
 from backend.utils.crawl.constants import SEARCH_KEYWORDS
+from backend.utils.crawl.data_processor import DataProcessor
 
 # 로깅 설정
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+# DataProcessor 인스턴스 생성
+data_processor = DataProcessor()
 
 # 크롤링 상태 관리
 crawling_status = {
@@ -128,24 +132,38 @@ async def run_crawler(crawler: BidCrawlerTest, websocket: WebSocket):
     try:
         await crawler.navigate_and_analyze()
         
+        # 크롤링 결과가 있는 경우, DataProcessor로 엑셀 파일 생성
+        if crawler.all_results:
+            excel_filename = None
+            try:
+                df = data_processor.process_crawling_results(crawler.all_results)
+                excel_path = data_processor.export_to_excel(df)
+                excel_filename = os.path.basename(excel_path)
+                logger.info(f"엑셀 파일 생성 완료: {excel_filename}")
+            except Exception as e:
+                logger.error(f"엑셀 파일 생성 중 오류: {str(e)}")
+        
         # 크롤링 완료 후 상태 업데이트
         crawling_status["is_running"] = False
-        await websocket.send_json({
-            "type": "status",
-            "message": "크롤링 완료",
-            "data": {
-                "total_results": len(crawler.all_results),
-                "processed_keywords": len(crawler.processed_keywords)
-            }
-        })
+        if websocket:
+            await websocket.send_json({
+                "type": "status",
+                "message": "크롤링 완료",
+                "data": {
+                    "total_results": len(crawler.all_results),
+                    "processed_keywords": len(crawler.processed_keywords),
+                    "excel_file": excel_filename if 'excel_filename' in locals() else None
+                }
+            })
         
     except Exception as e:
         logger.error(f"크롤링 실행 중 오류: {str(e)}")
         crawling_status["is_running"] = False
-        await websocket.send_json({
-            "type": "error",
-            "message": f"크롤링 중 오류 발생: {str(e)}"
-        })
+        if websocket:
+            await websocket.send_json({
+                "type": "error",
+                "message": f"크롤링 중 오류 발생: {str(e)}"
+            })
     finally:
         await crawler.cleanup()
 
@@ -239,14 +257,24 @@ async def get_crawl_results():
             
         with open(latest_file, 'r', encoding='utf-8') as f:
             data = json.load(f)
+        
+        # 결과를 DataFrame으로 변환하고 엑셀 파일로 저장
+        results = data.get("results", [])
+        if results:
+            df = data_processor.process_crawling_results(results)
+            excel_path = data_processor.export_to_excel(df)
+            excel_filename = os.path.basename(excel_path)
+        else:
+            excel_filename = None
             
         return {
             "summary": {
-                "total_results": len(data.get("results", [])),
+                "total_results": len(results),
                 "processed_keywords": len(data.get("processed_keywords", [])),
-                "total_keywords": data.get("total_keywords", 0)
+                "total_keywords": data.get("total_keywords", 0),
+                "excel_file": excel_filename
             },
-            "results": data.get("results", [])
+            "results": results
         }
         
     except Exception as e:
