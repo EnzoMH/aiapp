@@ -4,36 +4,21 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>PROGEN - AI 어시스턴트</title>
-    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet" />
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link href="/static/css/style.css" rel="stylesheet">
 </head>
 <body class="bg-gray-50 h-screen flex flex-col overflow-hidden">
     <!-- 헤더 -->
-    <header class="bg-white border-b border-gray-200 z-10">
-        <div class="container mx-auto px-4 py-3 flex justify-between items-center">
-            <div class="flex items-center gap-2">
-                <h1 class="text-xl font-bold text-gray-800">PROGEN</h1>
-                <span class="text-sm text-gray-500">AI 어시스턴트</span>
-            </div>
-            <div class="flex items-center gap-4">
-                <div id="model-selector" class="flex items-center bg-gray-100 p-1 rounded-lg">
-                    <button class="px-3 py-1.5 rounded-md text-sm font-medium model-btn active" data-model="meta">
-                        Meta
-                    </button>
-                    <button class="px-3 py-1.5 rounded-md text-sm font-medium model-btn" data-model="claude">
-                        Claude
-                    </button>
-                    <button class="px-3 py-1.5 rounded-md text-sm font-medium model-btn" data-model="gemini">
-                        Gemini
-                    </button>
-                </div>
-                <div class="flex items-center gap-2">
-                    <span id="userInfo" class="text-sm text-gray-600"></span>
-                    <button id="logoutBtn" class="text-sm px-3 py-1.5 bg-gray-100 hover:bg-gray-200 rounded-md">
-                        로그아웃
-                    </button>
-                </div>
+    <header class="bg-white shadow">
+        <div class="max-w-7xl mx-auto px-4 py-6 sm:px-6 lg:px-8">
+            <div class="flex justify-between items-center">
+                <h1 class="text-3xl font-bold text-gray-900">PROGEN, 당신의 어시스턴트</h1>
+                <nav class="flex space-x-4">
+                    <a href="/home" class="text-blue-600 font-medium">홈</a>
+                    <a href="/prop" class="text-gray-600 hover:text-blue-600 font-medium">제안서 작성</a>
+                    <a href="/crawl" class="text-gray-600 hover:text-blue-600 font-medium">크롤링</a>
+                </nav>
             </div>
         </div>
     </header>
@@ -55,6 +40,11 @@
                 <a href="/prop" class="flex items-center p-2 text-gray-700 hover:bg-gray-100 rounded-md">
                     <i class="fas fa-file-alt mr-3 text-gray-500"></i>
                     <span>새 제안서 작성</span>
+                </a>
+                
+                <a href="/crawl" class="flex items-center p-2 text-gray-700 hover:bg-gray-100 rounded-md">
+                    <i class="fas fa-search mr-3 text-gray-500"></i>
+                    <span>입찰공고 크롤링</span>
                 </a>
                 
                 <a href="#" class="flex items-center p-2 text-gray-700 hover:bg-gray-100 rounded-md">
@@ -110,6 +100,21 @@
             <!-- 입력 영역 -->
             <div class="p-4 bg-white">
                 <div class="max-w-3xl mx-auto relative">
+                    <!-- 모델 선택 버튼 그룹 -->
+                    <div class="mb-4 flex justify-center">
+                        <div class="inline-flex shadow-sm rounded-md bg-gray-100 p-1">
+                            <button type="button" class="model-btn px-4 py-2 text-sm font-medium rounded-md active" data-model="claude">
+                                Claude
+                            </button>
+                            <button type="button" class="model-btn px-4 py-2 text-sm font-medium rounded-md" data-model="gemini">
+                                Gemini
+                            </button>
+                            <button type="button" class="model-btn px-4 py-2 text-sm font-medium rounded-md" data-model="meta">
+                                Meta
+                            </button>
+                        </div>
+                    </div>
+                    
                     <div class="flex items-center">
                         <button id="uploadBtn" class="text-gray-500 hover:text-gray-700 p-2">
                             <i class="fas fa-paperclip"></i>
@@ -137,6 +142,6 @@
         </div>
     </main>
     
-    <script src="/static/js/home.js"></script>
+    <script src="/static/js/home.js" type="module"></script>
 </body>
 </html>

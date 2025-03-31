@@ -1,0 +1,312 @@
+<!DOCTYPE html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>나라장터 크롤링</title>
+    <!-- 부트스트랩 CSS CDN -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.3/font/bootstrap-icons.css">
+    <!-- Tailwind CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet" />
+    <!-- Font Awesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- 커스텀 CSS -->
+    <link href="/static/css/style.css" rel="stylesheet">
+    <style>
+        body {
+            padding-top: 0;
+            background-color: #f8f9fa;
+        }
+        .card {
+            margin-bottom: 20px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+        .keyword-list {
+            max-height: 300px;
+            overflow-y: auto;
+        }
+        .result-item {
+            border-bottom: 1px solid #e9ecef;
+            padding: 10px 0;
+        }
+        .result-item:last-child {
+            border-bottom: none;
+        }
+        .highlight {
+            background-color: #fff3cd;
+            padding: 2px 4px;
+            border-radius: 3px;
+        }
+        #progressBar {
+            height: 10px;
+            transition: width 0.3s;
+        }
+        .status-badge {
+            font-size: 0.8rem;
+        }
+        .tab-content {
+            border: 1px solid #dee2e6;
+            border-top: none;
+            padding: 15px;
+            background-color: white;
+            border-radius: 0 0 5px 5px;
+        }
+        .nav-tabs .nav-link {
+            font-weight: 500;
+        }
+        .nav-tabs .nav-link.active {
+            background-color: #f8f9fa;
+            border-bottom-color: #f8f9fa;
+        }
+        #agentPanel {
+            border: 1px solid #e9ecef;
+            border-radius: 5px;
+            padding: 15px;
+            background-color: #f8f9fa;
+        }
+        .main-content {
+            padding-top: 20px;
+        }
+    </style>
+  </head>
+  <body class="bg-gray-50 min-h-screen flex flex-col">
+    <!-- 헤더 -->
+    <header class="bg-white shadow">
+        <div class="max-w-7xl mx-auto px-4 py-6 sm:px-6 lg:px-8">
+            <div class="flex justify-between items-center">
+                <h1 class="text-3xl font-bold text-gray-900">PROGEN, 당신의 어시스턴트</h1>
+                <nav class="flex space-x-4">
+                    <a href="/home" class="text-gray-600 hover:text-blue-600 font-medium">홈</a>
+                    <a href="/prop" class="text-gray-600 hover:text-blue-600 font-medium">제안서 작성</a>
+                    <a href="/crawl" class="text-blue-600 font-medium">크롤링</a>
+                </nav>
+            </div>
+        </div>
+    </header>
+
+    <div class="container main-content">
+        <h1 class="text-center mb-4">나라장터 크롤링</h1>
+        
+        <ul class="nav nav-tabs mb-3" id="crawlTabs" role="tablist">
+            <li class="nav-item" role="presentation">
+                <button class="nav-link active" id="standard-tab" data-bs-toggle="tab" data-bs-target="#standardCrawl" type="button" role="tab" aria-controls="standardCrawl" aria-selected="true">
+                    <i class="bi bi-search"></i> 표준 크롤링
+                </button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="agent-tab" data-bs-toggle="tab" data-bs-target="#agentCrawl" type="button" role="tab" aria-controls="agentCrawl" aria-selected="false">
+                    <i class="bi bi-robot"></i> AI 에이전트 크롤링
+                </button>
+            </li>
+        </ul>
+        
+        <div class="tab-content" id="crawlTabsContent">
+            <!-- 표준 크롤링 탭 -->
+            <div class="tab-pane fade show active" id="standardCrawl" role="tabpanel" aria-labelledby="standard-tab">
+                <div class="row">
+                    <div class="col-md-5">
+                        <div class="card">
+                            <div class="card-header bg-primary text-white">
+                                <h5 class="mb-0">크롤링 제어</h5>
+                            </div>
+                            <div class="card-body">
+                                <div class="mb-3">
+                                    <label for="keywordInput" class="form-label">검색 키워드</label>
+                                    <input type="text" class="form-control" id="keywordInput" placeholder="키워드를 입력하세요 (쉼표로 구분)">
+                                    <small class="text-muted">예: 소프트웨어, AI, 클라우드</small>
+                                </div>
+                                <div class="mb-3">
+                                    <label for="startDate" class="form-label">시작일</label>
+                                    <input type="date" class="form-control" id="startDate">
+                                </div>
+                                <div class="mb-3">
+                                    <label for="endDate" class="form-label">종료일</label>
+                                    <input type="date" class="form-control" id="endDate">
+                                </div>
+                                <div class="d-grid gap-2">
+                                    <button id="startBtn" class="btn btn-success">
+                                        <i class="bi bi-play-fill"></i> 크롤링 시작
+                                    </button>
+                                    <button id="stopBtn" class="btn btn-danger" disabled>
+                                        <i class="bi bi-stop-fill"></i> 크롤링 중지
+                                    </button>
+                                </div>
+                                
+                                <!-- 기본 키워드 목록 (hidden) -->
+                                <div id="defaultKeywords" style="display: none;">소프트웨어,시스템,개발,유지보수,AI,인공지능,클라우드,빅데이터,데이터,IT,정보화,플랫폼</div>
+                            </div>
+                        </div>
+                        
+                        <div class="card">
+                            <div class="card-header bg-info text-white">
+                                <h5 class="mb-0">검색 키워드</h5>
+                            </div>
+                            <div class="card-body keyword-list" id="keywordList">
+                                <!-- 키워드 목록이 여기에 표시됩니다 -->
+                                <div class="text-center text-muted">
+                                    <p>크롤링을 시작하면 키워드가 표시됩니다.</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="col-md-7">
+                        <div class="card">
+                            <div class="card-header bg-success text-white">
+                                <h5 class="mb-0">진행 상황</h5>
+                            </div>
+                            <div class="card-body">
+                                <!-- 연결 상태 표시 추가 -->
+                                <div class="mb-2 d-flex justify-content-between">
+                                    <span>연결 상태:</span>
+                                    <span id="connectionStatus" class="badge bg-secondary">연결 중...</span>
+                                </div>
+                                
+                                <div class="progress mb-3">
+                                    <div id="progressBar" class="progress-bar progress-bar-striped progress-bar-animated" role="progressbar" style="width: 0%"></div>
+                                </div>
+                                <div class="d-flex justify-content-between mb-3">
+                                    <span id="progressStatus">준비 중...</span>
+                                    <span id="progressPercent">0%</span>
+                                </div>
+                                <div id="statusMessages" class="alert alert-secondary" style="max-height: 200px; overflow-y: auto;">
+                                    <div class="text-center text-muted">
+                                        <p>상태 메시지가 여기에 표시됩니다.</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="card">
+                            <div class="card-header bg-warning">
+                                <h5 class="mb-0">결과 목록</h5>
+                            </div>
+                            <div class="card-body">
+                                <div class="d-flex justify-content-between mb-3">
+                                    <span>총 <span id="resultCount">0</span>개의 결과</span>
+                                    <button id="downloadBtn" class="btn btn-sm btn-outline-primary">
+                                        <i class="bi bi-download"></i> 결과 다운로드
+                                    </button>
+                                </div>
+                                <div class="table-responsive">
+                                    <table class="table table-striped table-hover">
+                                        <thead>
+                                            <tr>
+                                                <th>#</th>
+                                                <th>입찰번호</th>
+                                                <th>제목</th>
+                                                <th>발주기관</th>
+                                                <th>입찰유형</th>
+                                                <th>입찰일</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="resultsTable">
+                                            <tr>
+                                                <td colspan="6" class="text-center py-3">
+                                                    <div class="alert alert-info mb-0">크롤링 결과가 여기에 표시됩니다.</div>
+                                                </td>
+                                            </tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- AI 에이전트 크롤링 탭 -->
+            <div class="tab-pane fade" id="agentCrawl" role="tabpanel" aria-labelledby="agent-tab">
+                <div class="row">
+                    <div class="col-md-12 mb-4">
+                        <div class="alert alert-info" role="alert">
+                            <h4 class="alert-heading"><i class="bi bi-info-circle"></i> AI 에이전트 크롤링이란?</h4>
+                            <p>AI 비전 기술을 활용하여 웹사이트의 구조가 변경되어도 안정적으로 크롤링을 수행합니다. 기존 크롤러가 실패할 경우 자동으로 AI 에이전트 모드로 전환됩니다.</p>
+                            <hr>
+                            <p class="mb-0">이 기능은 <strong>Gemini API</strong>를 사용하며, 웹페이지의 스크린샷을 분석하여 필요한 정보를 추출합니다.</p>
+                        </div>
+                    </div>
+                
+                    <div class="col-md-5">
+                        <div class="card">
+                            <div class="card-header bg-primary text-white">
+                                <h5 class="mb-0">AI 에이전트 설정</h5>
+                            </div>
+                            <div class="card-body">
+                                <div class="mb-3">
+                                    <label for="keywordInput" class="form-label">검색 키워드 (쉼표로 구분)</label>
+                                    <input type="text" class="form-control" id="keywordInput" placeholder="예: VR, AR, 메타버스">
+                                </div>
+                                <div class="mb-3 form-check">
+                                    <input type="checkbox" class="form-check-input" id="forceFallbackMode" checked>
+                                    <label class="form-check-label" for="forceFallbackMode">강제 AI 에이전트 모드 사용</label>
+                                    <small class="form-text text-muted d-block">체크 해제 시 기존 크롤러 실패 시에만 AI 에이전트가 작동합니다.</small>
+                                </div>
+                                <div class="d-grid gap-2">
+                                    <button id="startAgentBtn" class="btn btn-success">
+                                        <i class="bi bi-robot"></i> AI 에이전트 크롤링 시작
+                                    </button>
+                                    <button id="stopAgentBtn" class="btn btn-danger" disabled>
+                                        <i class="bi bi-stop-fill"></i> AI 에이전트 크롤링 중지
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="card mt-3">
+                            <div class="card-header bg-info text-white">
+                                <h5 class="mb-0">에이전트 상태</h5>
+                            </div>
+                            <div class="card-body">
+                                <!-- 연결 상태 표시 추가 -->
+                                <div class="mb-2 d-flex justify-content-between">
+                                    <span>연결 상태:</span>
+                                    <span id="agentConnectionStatus" class="badge bg-secondary">연결 중...</span>
+                                </div>
+                                
+                                <div id="agentStatus" class="alert alert-secondary">
+                                    <div class="text-center text-muted">
+                                        <p>AI 에이전트 상태가 여기에 표시됩니다.</p>
+                                    </div>
+                                </div>
+                                <div class="d-flex justify-content-between">
+                                    <span>모드: <span id="agentMode" class="badge bg-secondary">대기 중</span></span>
+                                    <span>결과: <span id="agentResultCount">0</span>개</span>
+                                </div>
+                                <div class="mt-2">
+                                    <span id="agentKeywordStatus" class="small text-muted">대기 중</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="col-md-7">
+                        <div class="card">
+                            <div class="card-header bg-success text-white">
+                                <h5 class="mb-0">AI 에이전트 결과</h5>
+                            </div>
+                            <div class="card-body">
+                                <div id="agentResultPreview" style="max-height: 500px; overflow-y: auto;">
+                                    <div class="text-center text-muted">
+                                        <p>AI 에이전트 크롤링 결과가 여기에 표시됩니다.</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 부트스트랩 JS CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/js/bootstrap.bundle.min.js"></script>
+    
+    <!-- 유틸리티 스크립트 (모듈로 로드) -->
+    <script type="module" src="/static/js/crawlutil/index.js"></script>
+    
+    <!-- 메인 크롤링 스크립트 -->
+    <script type="module" src="/static/js/crawl.js"></script>
+  </body>
+</html> 

@@ -62,7 +62,13 @@ button:active {
 
 /* 모델 선택 버튼 */
 .model-btn {
-    transition: all 0.2s;
+    transition: all 0.2s ease-in-out;
+    color: #4b5563;
+    background-color: transparent;
+}
+
+.model-btn:hover {
+    background-color: rgba(209, 213, 219, 0.5);
 }
 
 .model-btn.active {
@@ -227,6 +233,9 @@ textarea {
     bottom: 20px;
     right: 20px;
     z-index: 1000;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
 }
 
 .toast {
@@ -234,7 +243,9 @@ textarea {
     margin-top: 0.5rem;
     border-radius: 0.375rem;
     box-shadow: 0 2px 5px rgba(0,0,0,0.2);
-    animation: fadeIn 0.3s, fadeOut 0.3s 2.7s;
+    animation: fadeIn 0.3s;
+    min-width: 200px;
+    max-width: 350px;
 }
 
 .toast.success {
@@ -252,13 +263,13 @@ textarea {
     color: white;
 }
 
+.toast.fade-out {
+    animation: fadeOut 0.3s forwards;
+}
+
 @keyframes fadeOut {
     from { opacity: 1; transform: translateY(0); }
     to { opacity: 0; transform: translateY(-20px); }
-}
-
-.fade-out {
-    animation: fadeOut 0.3s forwards;
 }
 
 /* 메시지 컨테이너 중앙 정렬 */
@@ -275,4 +286,137 @@ textarea {
     .message.user, .message.assistant {
         max-width: 90%;
     }
+}
+
+/* 크롤링 관련 스타일 */
+
+/* 키워드 태그 스타일 */
+.keyword-tag {
+    display: inline-flex;
+    align-items: center;
+    background-color: #dbeafe;
+    color: #1e40af;
+    border-radius: 0.25rem;
+    padding: 0.25rem 0.5rem;
+    font-size: 0.875rem;
+    margin-right: 0.5rem;
+    margin-bottom: 0.5rem;
+}
+
+.keyword-tag button {
+    color: #3b82f6;
+    margin-left: 0.25rem;
+    display: flex;
+    align-items: center;
+}
+
+.keyword-tag button:hover {
+    color: #1e40af;
+}
+
+/* 로딩 표시 */
+#loading {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    padding: 2rem;
+}
+
+#loading .spinner {
+    width: 2rem;
+    height: 2rem;
+    border: 4px solid rgba(59, 130, 246, 0.3);
+    border-top-color: #3b82f6;
+}
+
+/* 상태 표시 스타일 */
+#wsStatus, #statusMessage, #errorMessage, #progressBar {
+    margin-bottom: 1rem;
+}
+
+/* 크롤링 로그 스타일 */
+#logMessages {
+    background-color: #f9fafb;
+    font-family: 'Consolas', 'Monaco', monospace;
+    padding: 1rem;
+    height: 200px;
+    overflow-y: auto;
+    border-radius: 0.25rem;
+    border: 1px solid #e5e7eb;
+}
+
+/* 상세 정보 모달 스타일 */
+#detailModal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: rgba(0, 0, 0, 0.5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 50;
+}
+
+#detailModal.hidden {
+    display: none;
+}
+
+#modalContent {
+    background-color: white;
+    padding: 1.5rem;
+    border-radius: 0.5rem;
+    max-width: 800px;
+    width: 100%;
+    max-height: 90vh;
+    overflow-y: auto;
+}
+
+/* 검색 결과 테이블 스타일 */
+#searchResults table {
+    width: 100%;
+    border-collapse: separate;
+    border-spacing: 0;
+}
+
+#searchResults th, #searchResults td {
+    border-bottom: 1px solid #e5e7eb;
+    padding: 0.75rem 1rem;
+    text-align: left;
+}
+
+#searchResults th {
+    background-color: #f9fafb;
+    font-weight: 500;
+    color: #4b5563;
+    text-transform: uppercase;
+    font-size: 0.75rem;
+    letter-spacing: 0.05em;
+}
+
+#searchResults tr:hover {
+    background-color: #f9fafb;
+}
+
+/* 내비게이션 스타일 */
+nav a {
+    text-decoration: none;
+    padding: 0.5rem 1rem;
+    border-radius: 0.25rem;
+    transition: all 0.2s;
+}
+
+nav a:hover {
+    background-color: #f3f4f6;
+}
+
+nav a.active {
+    color: #3b82f6;
+    font-weight: 500;
+}
+
+/* 기본 스크롤 활성화 */
+html, body {
+    overflow-y: auto !important;
 }
