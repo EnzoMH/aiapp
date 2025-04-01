@@ -147,14 +147,44 @@ class G2BCrawler:
             # 메인 윈도우로 복귀
             self.driver.switch_to.window(main_window)
             
-            # 페이지 내 팝업창 닫기 (X 버튼 클릭)
+            # 나라장터 특정 팝업창 닫기 (공지사항 등)
             try:
-                # 여러 종류의 팝업창 닫기 버튼 시도
-                close_buttons = self.driver.find_elements(By.CSS_SELECTOR, ".w2window_close, .close, [aria-label='창닫기']")
-                for button in close_buttons:
-                    button.click()
-                    logger.info("페이지 내 팝업창 닫기 성공")
-                    time.sleep(0.5)  # 약간의 지연
+                # 제공된 XPath 기반으로 닫기 버튼 찾기
+                popup_close_buttons = []
+                
+                # 일반적인 닫기 버튼 선택자
+                popup_close_buttons.extend(self.driver.find_elements(By.CSS_SELECTOR, ".w2window_close, .close, [aria-label='창닫기']"))
+                
+                # 나라장터 특정 공지사항 팝업 닫기 버튼
+                popup_close_buttons.extend(self.driver.find_elements(By.XPATH, "//button[contains(@id, 'poupR') and contains(@id, '_close')]"))
+                popup_close_buttons.extend(self.driver.find_elements(By.XPATH, "//button[contains(@class, 'w2window_close_acc') and @aria-label='창닫기']"))
+                
+                # ID 패턴 기반 닫기 버튼 찾기
+                popup_close_buttons.extend(self.driver.find_elements(By.CSS_SELECTOR, "[id*='poupR'][id$='_close']"))
+                
+                # 찾은 모든 버튼 클릭 시도
+                closed_count = 0
+                for button in popup_close_buttons:
+                    try:
+                        logger.info(f"팝업 닫기 버튼 발견: {button.get_attribute('id')}")
+                        button.click()
+                        closed_count += 1
+                        logger.info("페이지 내 팝업창 닫기 성공")
+                        await asyncio.sleep(0.5)  # 약간의 지연
+                    except Exception as e:
+                        logger.debug(f"팝업 버튼 클릭 실패 (무시 가능): {str(e)}")
+                
+                if closed_count > 0:
+                    logger.info(f"총 {closed_count}개의 팝업창을 닫았습니다.")
+                
+                # 메인 컨텐츠 영역 클릭해서 포커스 주기
+                try:
+                    main_content = self.driver.find_element(By.ID, "container")
+                    main_content.click()
+                    logger.debug("메인 컨텐츠 영역 포커스 설정")
+                except Exception:
+                    pass
+                    
             except Exception as e:
                 logger.warning(f"페이지 내 팝업창 닫기 실패 (무시 가능): {str(e)}")
                 

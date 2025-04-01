@@ -1,7 +1,7 @@
 // crawl.js - 나라장터 크롤링 모듈
 import { Debug } from './crawlutil/logger.js';
 import WebSocketManager from './crawlutil/websocket.js';
-import * as DomUtils from './crawlutil/dom-helper.js';
+import DomUtils from './crawlutil/dom-helper.js';
 import * as ApiService from './crawlutil/api-service.js';
 
 // 애플리케이션 시작 로그
@@ -186,11 +186,15 @@ document.addEventListener('DOMContentLoaded', () => {
                 Debug.warn('연결 상태 표시 요소를 찾을 수 없습니다');
             }
             
-            // WebSocket 매니저 인스턴스 생성
+            // 디버깅 정보 - 현재 URL
+            Debug.debug(`현재 URL: ${window.location.href}`);
+            Debug.debug(`WebSocket URL: ${wsUrl}`);
+            
+            // WebSocket 매니저 인스턴스 생성 (수정된 생성자 형식 적용)
             standardWebSocketManager = new WebSocketManager(
                 wsUrl,
                 updateStatus,
-                connectionStatusElement,
+                'connectionStatus',
                 handleWebSocketError
             );
             
@@ -200,6 +204,7 @@ document.addEventListener('DOMContentLoaded', () => {
             
         } catch (error) {
             Debug.error('표준 WebSocket 연결 중 오류 발생:', error);
+            console.error('WebSocket 연결 상세 오류:', error);
         }
     }
     
@@ -214,11 +219,15 @@ document.addEventListener('DOMContentLoaded', () => {
                 Debug.warn('에이전트 연결 상태 표시 요소를 찾을 수 없습니다');
             }
             
-            // WebSocket 매니저 인스턴스 생성
+            // 디버깅 정보 - 현재 URL
+            Debug.debug(`현재 URL: ${window.location.href}`);
+            Debug.debug(`에이전트 WebSocket URL: ${agentWsUrl}`);
+            
+            // WebSocket 매니저 인스턴스 생성 (수정된 생성자 형식 적용)
             agentWebSocketManager = new WebSocketManager(
                 agentWsUrl,
                 updateAgentStatus,
-                agentConnectionStatusElement,
+                'agentConnectionStatus',
                 handleAgentWebSocketError
             );
             
@@ -228,25 +237,42 @@ document.addEventListener('DOMContentLoaded', () => {
             
         } catch (error) {
             Debug.error('에이전트 WebSocket 연결 중 오류 발생:', error);
+            console.error('에이전트 WebSocket 연결 상세 오류:', error);
         }
     }
     
     // WebSocket 오류 처리
     function handleWebSocketError(error) {
         Debug.error('WebSocket 오류 발생:', error);
+        console.error('WebSocket 오류 상세:', error);
+        
         const statusMessages = document.getElementById('statusMessages');
         if (statusMessages) {
             DomUtils.appendMessage(statusMessages, '서버 연결 오류가 발생했습니다. 다시 시도하세요.', 'error');
         }
+        
+        // 오류 발생 시 5초 후 재연결 시도
+        setTimeout(() => {
+            Debug.info('WebSocket 재연결 시도 (오류 후)');
+            connectWebSocket();
+        }, 5000);
     }
     
     // 에이전트 WebSocket 오류 처리
     function handleAgentWebSocketError(error) {
         Debug.error('에이전트 WebSocket 오류 발생:', error);
+        console.error('에이전트 WebSocket 오류 상세:', error);
+        
         const agentStatus = document.getElementById('agentStatus');
         if (agentStatus) {
             DomUtils.appendMessage(agentStatus, 'AI 에이전트 연결 오류가 발생했습니다. 다시 시도하세요.', 'error');
         }
+        
+        // 오류 발생 시 5초 후 재연결 시도
+        setTimeout(() => {
+            Debug.info('에이전트 WebSocket 재연결 시도 (오류 후)');
+            connectAgentWebSocket();
+        }, 5000);
     }
     
     // 크롤링 상태 업데이트
@@ -402,6 +428,7 @@ document.addEventListener('DOMContentLoaded', () => {
     async function startCrawling() {
         try {
             Debug.info('크롤링 시작 요청');
+            Debug.debug('크롤링 시작 함수 진입');
             
             // DOM 요소 참조 가져오기
             const keywordInput = document.getElementById('keywordInput');
@@ -409,6 +436,14 @@ document.addEventListener('DOMContentLoaded', () => {
             const endDate = document.getElementById('endDate');
             const statusMessages = document.getElementById('statusMessages');
             const keywordList = document.getElementById('keywordList');
+            
+            Debug.debug('DOM 요소 참조 확인:', { 
+                keywordInput: !!keywordInput, 
+                startDate: !!startDate, 
+                endDate: !!endDate, 
+                statusMessages: !!statusMessages, 
+                keywordList: !!keywordList 
+            });
             
             // 입력 확인
             if (!keywordInput || !keywordInput.value.trim()) {
@@ -422,6 +457,8 @@ document.addEventListener('DOMContentLoaded', () => {
             // 키워드 처리 (쉼표로 구분)
             const keywordsText = keywordInput.value.trim();
             const keywords = keywordsText.split(',').map(k => k.trim()).filter(k => k);
+            
+            Debug.debug('입력된 키워드:', keywords);
             
             if (keywords.length === 0) {
                 Debug.warn('유효한 키워드가 없습니다');
@@ -440,11 +477,14 @@ document.addEventListener('DOMContentLoaded', () => {
                     keywordItem.textContent = keyword;
                     keywordList.appendChild(keywordItem);
                 });
+                Debug.debug('키워드 목록 UI 업데이트 완료');
             }
             
             // 시작 및 종료 날짜 가져오기
             const startDateValue = startDate ? startDate.value : null;
             const endDateValue = endDate ? endDate.value : null;
+            
+            Debug.debug('날짜 범위:', { startDate: startDateValue, endDate: endDateValue });
             
             // 상태 메시지 표시
             if (statusMessages) {
@@ -454,10 +494,20 @@ document.addEventListener('DOMContentLoaded', () => {
                     `키워드 [${keywords.join(', ')}]에 대한 크롤링을 시작합니다.`, 
                     'info'
                 );
+                Debug.debug('상태 메시지 UI 업데이트 완료');
             }
             
+            // 버튼 상태 업데이트
+            const startBtn = document.getElementById('startBtn');
+            const stopBtn = document.getElementById('stopBtn');
+            
+            if (startBtn) startBtn.disabled = true;
+            if (stopBtn) stopBtn.disabled = false;
+            
             // API 요청
+            Debug.debug('ApiService.startCrawling 호출 전');
             const response = await ApiService.startCrawling(keywords, startDateValue, endDateValue);
+            Debug.debug('ApiService.startCrawling 호출 완료:', response);
             
             // 응답 확인
             if (response && response.success) {
@@ -474,13 +524,26 @@ document.addEventListener('DOMContentLoaded', () => {
                         'error'
                     );
                 }
+                
+                // 버튼 상태 원복
+                if (startBtn) startBtn.disabled = false;
+                if (stopBtn) stopBtn.disabled = true;
             }
         } catch (error) {
             Debug.error('크롤링 시작 중 오류 발생:', error);
+            console.error('크롤링 시작 상세 오류:', error);
+            
             const statusMessages = document.getElementById('statusMessages');
             if (statusMessages) {
                 DomUtils.appendMessage(statusMessages, '크롤링 요청 중 오류가 발생했습니다.', 'error');
             }
+            
+            // 버튼 상태 원복
+            const startBtn = document.getElementById('startBtn');
+            const stopBtn = document.getElementById('stopBtn');
+            
+            if (startBtn) startBtn.disabled = false;
+            if (stopBtn) stopBtn.disabled = true;
         }
     }
     

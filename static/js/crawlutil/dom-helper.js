@@ -9,7 +9,7 @@
  * @param {boolean} required - 필수 여부
  * @returns {HTMLElement|null} - 찾은 요소 또는 null
  */
-export function getElement(id, required = false) {
+function getElement(id, required = false) {
     const element = document.getElementById(id);
     
     if (!element && required) {
@@ -24,7 +24,7 @@ export function getElement(id, required = false) {
  * @param {string[]} ids - 요소 ID 배열
  * @returns {Object} - ID를 키로 하는 요소 객체
  */
-export function getElements(ids) {
+function getElements(ids) {
     const elements = {};
     const missing = [];
     
@@ -50,10 +50,25 @@ export function getElements(ids) {
  * @param {string} message - 메시지 내용
  * @param {string} type - 메시지 타입 (info, success, warning, danger)
  */
-export function appendStatusMessage(containerId, message, type = 'info') {
+function appendStatusMessage(containerId, message, type = 'info') {
     const container = document.getElementById(containerId);
     if (!container) {
         console.error(`상태 메시지 컨테이너를 찾을 수 없음: ${containerId}`);
+        return;
+    }
+    
+    appendMessage(container, message, type);
+}
+
+/**
+ * 상태 메시지 추가 (컨테이너 요소 직접 전달)
+ * @param {HTMLElement} container - 컨테이너 요소
+ * @param {string} message - 메시지 내용
+ * @param {string} type - 메시지 타입 (info, success, warning, danger)
+ */
+function appendMessage(container, message, type = 'info') {
+    if (!container) {
+        console.error('상태 메시지 컨테이너가 null 또는 undefined입니다');
         return;
     }
     
@@ -81,7 +96,7 @@ export function appendStatusMessage(containerId, message, type = 'info') {
  * @param {string} buttonId - 버튼 ID
  * @param {boolean} disabled - 비활성화 여부
  */
-export function setButtonState(buttonId, disabled) {
+function setButtonState(buttonId, disabled) {
     const button = document.getElementById(buttonId);
     if (button) {
         button.disabled = disabled;
@@ -96,7 +111,7 @@ export function setButtonState(buttonId, disabled) {
  * @param {number} percent - 퍼센트 값 (0-100)
  * @param {string} statusText - 상태 텍스트
  */
-export function updateProgressBar(barId, percentId, statusId, percent, statusText) {
+function updateProgressBar(barId, percentId, statusId, percent, statusText) {
     const bar = document.getElementById(barId);
     const percentElement = document.getElementById(percentId);
     const statusElement = document.getElementById(statusId);
@@ -120,7 +135,7 @@ export function updateProgressBar(barId, percentId, statusId, percent, statusTex
  * @param {Array} data - 표시할 데이터 배열
  * @param {Array} columns - 컬럼 정의 ([{key, label, renderer}])
  */
-export function renderTable(containerId, data, columns) {
+function renderTable(containerId, data, columns) {
     const container = document.getElementById(containerId);
     if (!container) {
         console.error(`테이블 컨테이너를 찾을 수 없음: ${containerId}`);
@@ -177,4 +192,27 @@ export function renderTable(containerId, data, columns) {
     
     table.appendChild(tbody);
     container.appendChild(table);
-} 
+}
+
+// DomUtils 객체를 생성하여 모든 함수를 메서드로 노출
+const DomUtils = {
+    getElement,
+    getElements,
+    appendStatusMessage,
+    appendMessage,
+    setButtonState,
+    updateProgressBar,
+    renderTable
+};
+
+// 개별 함수와 DomUtils 객체를 내보냄
+export { 
+    getElement, 
+    getElements, 
+    appendStatusMessage, 
+    appendMessage, 
+    setButtonState, 
+    updateProgressBar, 
+    renderTable,
+    DomUtils as default 
+}; 

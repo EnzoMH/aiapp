@@ -3,40 +3,70 @@ PROGEN/
 │   ├── css/
 │   │   └── style.css           # 메인 스타일시트
 │   ├── js/
-│   │   ├── home.js             # 홈페이지 스크립트 (기존 script.js에서 변경)
-│   │   └── login.js            # 로그인 페이지 스크립트 (신규 추가)
-│   ├── image/                  # 이미지 리소스 디렉토리 (신규 추가)
+│   │   ├── crawl.js            # 크롤링 페이지 스크립트
+│   │   ├── home.js             # 홈페이지 스크립트
+│   │   ├── login.js            # 로그인 페이지 스크립트
+│   │   ├── crawlutil/          # 크롤링 유틸리티 모듈
+│   │   │   ├── index.js        # 크롤링 유틸리티 진입점
+│   │   │   ├── api-service.js  # API 호출 서비스
+│   │   │   ├── websocket.js    # WebSocket 관리 클래스
+│   │   │   ├── logger.js       # 로깅 유틸리티
+│   │   │   └── dom-helper.js   # DOM 조작 헬퍼 함수
+│   │   └── home/               # 홈페이지 모듈
+│   │       ├── index.js        # 홈페이지 스크립트 진입점
+│   │       ├── auth.js         # 인증 관련 기능
+│   │       ├── fileManager.js  # 파일 관리 기능
+│   │       ├── chatManager.js  # 채팅 관리 기능
+│   │       ├── ui.js           # UI 컴포넌트
+│   │       └── utils.js        # 유틸리티 함수
+│   ├── image/                  # 이미지 리소스 디렉토리
 │   │   ├── meta.png            # Meta 모델 아이콘
 │   │   ├── claude.png          # Claude 모델 아이콘
 │   │   └── gemini.png          # Gemini 모델 아이콘
 │   ├── home.html               # 홈페이지
+│   ├── crawl.html              # 크롤링 페이지
 │   └── login.html              # 로그인 페이지
 │
 ├── backend/                     # 백엔드 코어 디렉토리
 │   ├── __init__.py 
-│   ├── agent.py/                # utils/agent/ 클래스 총집합 파일, app.py에서 활용  
-│   ├── crawl.py/                # utils/crawl/ 클래스 총집합 파일, app.py에서 활용  
-│   ├── prop.py/                 # utils/prop/ 클래스 총집합 파일, app.py에서 활용  
-│   ├── login.py               # 로그인/인증 관련 유틸리티 (신규 추가)
-│   ├── chat.py                # 채팅 관련 유틸리티 (신규 추가)
-│   ├── db.py                  # MongoDB 연결 및 조작
-│   ├── dbtest.py              # 데이터베이스 테스트
-│   └── utils/                 # 유틸리티 함수 디렉토리
-│       ├── __init__.py        
-│       ├── agent/             # AI 에이전트 관련 파일
-│       │   ├── __init__.py
-│       │   └── ai.py          # AI 관련 핵심 클래스 및 함수
-│       ├── crawl/             # 크롤러 관련 파일
-│       │   ├── __init__.py
-│       │   └── crawl.py       # 크롤링 관련 함수
-│       └── prop/
-│           ├── __init__.py
-│           ├── dc.py          # 문서 처리 함수, DocumentProcessor
-│           └── pg.py          # 제안서 생성 함수. ProposalGenerator
+│   ├── crawl.py                # 크롤링 기능 컨트롤러
+│   ├── login.py                # 로그인/인증 관련 유틸리티
+│   ├── utils/                  # 유틸리티 함수 디렉토리
+│   │   ├── __init__.py        
+│   │   ├── agent/              # AI 에이전트 관련 파일
+│   │   │   ├── __init__.py
+│   │   │   └── ai.py           # AI 관련 핵심 클래스 및 함수
+│   │   ├── db/                 # 데이터베이스 관련 파일
+│   │   │   ├── __init__.py
+│   │   │   └── models.py       # 데이터베이스 모델
+│   │   ├── crawl/              # 크롤러 관련 파일
+│   │   │   ├── __init__.py
+│   │   │   ├── README.md       # 크롤링 모듈 문서
+│   │   │   ├── models.py       # 크롤링 데이터 모델 (Pydantic)
+│   │   │   ├── crawler.py      # 나라장터 크롤러 구현
+│   │   │   ├── crawler_manager.py  # 크롤러 관리자 클래스
+│   │   │   ├── ai_agent.py     # AI 에이전트 크롤링 구현
+│   │   │   ├── core/           # 코어 컴포넌트
+│   │   │   └── utils/          # 크롤링 유틸리티
+│   │   └── prop/               # 제안서 생성 관련 파일
+│   │       ├── __init__.py
+│   │       ├── dc.py           # 문서 처리 함수, DocumentProcessor
+│   │       └── pg.py           # 제안서 생성 함수, ProposalGenerator
 │
-├── .env                        # 환경 변수 설정
-├── app.py                      # FastAPI 메인 애플리케이션
-├── directory.txt               # 디렉토리 구조 문서
-├── requirements.txt            # 프로젝트 의존성 목록
-└── user.json                   # 사용자 정보 데이터
+├── data/                        # 데이터 저장 디렉토리
+├── export/                      # 내보내기 파일 디렉토리
+├── logs/                        # 로그 파일 디렉토리
+├── test/                        # 테스트 코드 디렉토리
+│
+├── .env                         # 환경 변수 설정
+├── .gitignore                   # Git 무시 파일 목록
+├── app.py                       # FastAPI 메인 애플리케이션
+├── chat.py                      # 채팅 모듈
+├── dbcon.py                     # 데이터베이스 연결 설정
+├── docpro.py                    # 문서 처리 모듈
+├── debug.py                     # 디버깅 유틸리티
+├── README.md                    # 프로젝트 문서
+├── requirements.txt             # 프로젝트 의존성 목록
+├── server.log                   # 서버 로그 파일
+└── users.json                   # 사용자 정보 데이터
 

@@ -18,8 +18,38 @@ class Logger {
             warn: 'color: #ff9800; font-weight: bold',
             error: 'color: #ff0000; font-weight: bold',
             success: 'color: #4caf50; font-weight: bold',
-            highlight: 'background-color: #ffff00; color: #000000'
+            highlight: 'background-color: #ffff00; color: #000000',
+            network: 'color: #9c27b0; font-weight: bold',
+            request: 'color: #3f51b5; font-style: italic',
+            response: 'color: #009688; font-style: italic'
         };
+        
+        // 브라우저 콘솔에 초기화 메시지 출력
+        this.highlight(`Logger initialized: ${prefix || 'Default'}`);
+        
+        // 브라우저 환경 정보 로깅
+        this._logBrowserInfo();
+    }
+
+    /**
+     * 브라우저 환경 정보 로깅
+     * @private
+     */
+    _logBrowserInfo() {
+        try {
+            const browserInfo = {
+                userAgent: navigator.userAgent,
+                language: navigator.language,
+                platform: navigator.platform,
+                cookieEnabled: navigator.cookieEnabled,
+                windowSize: `${window.innerWidth}x${window.innerHeight}`,
+                url: window.location.href
+            };
+            
+            this.debug('Browser environment:', browserInfo);
+        } catch (error) {
+            this.warn('Failed to log browser info:', error);
+        }
     }
 
     /**
@@ -28,6 +58,7 @@ class Logger {
      */
     setLogLevel(level) {
         this.logLevel = level;
+        this.info(`Log level set to: ${level}`);
     }
 
     /**
@@ -36,6 +67,7 @@ class Logger {
      */
     setEnabled(enabled) {
         this.enabled = enabled;
+        this.info(`Logging ${enabled ? 'enabled' : 'disabled'}`);
     }
 
     /**
@@ -174,6 +206,50 @@ class Logger {
             console.log(`%c${formattedMessage}`, this.styles.highlight);
         }
     }
+    
+    /**
+     * Log network request
+     * @param {string} method - HTTP method
+     * @param {string} url - Request URL
+     * @param {Object} data - Request data
+     */
+    logRequest(method, url, data) {
+        if (!this.enabled || this.shouldSkipLogLevel('info')) return;
+        
+        const formattedMessage = this.formatMessage('network', `REQUEST: ${method} ${url}`);
+        this.addToHistory('network', formattedMessage);
+        
+        console.groupCollapsed(`%c${formattedMessage}`, this.styles.request);
+        if (data) {
+            console.log('Request data:', data);
+        }
+        console.trace('Request trace:');
+        console.groupEnd();
+    }
+    
+    /**
+     * Log network response
+     * @param {string} method - HTTP method
+     * @param {string} url - Request URL
+     * @param {number} status - Response status
+     * @param {Object} data - Response data
+     * @param {number} timeMs - Response time in milliseconds
+     */
+    logResponse(method, url, status, data, timeMs) {
+        if (!this.enabled || this.shouldSkipLogLevel('info')) return;
+        
+        const isSuccess = status >= 200 && status < 300;
+        const style = isSuccess ? this.styles.response : this.styles.error;
+        
+        const formattedMessage = this.formatMessage('network', `RESPONSE: ${method} ${url} (${status}) - ${timeMs}ms`);
+        this.addToHistory('network', formattedMessage);
+        
+        console.groupCollapsed(`%c${formattedMessage}`, style);
+        if (data) {
+            console.log('Response data:', data);
+        }
+        console.groupEnd();
+    }
 
     /**
      * Determine whether to skip logging based on log level
@@ -201,6 +277,7 @@ class Logger {
      */
     clearLogHistory() {
         this.logHistory = [];
+        this.debug('Log history cleared');
     }
 
     /**
@@ -217,6 +294,7 @@ class Logger {
         a.click();
         
         setTimeout(() => URL.revokeObjectURL(url), 100);
+        this.info(`Log history downloaded as ${filename}`);
     }
 }
 
@@ -226,11 +304,14 @@ const logger = new Logger('Crawl');
 // Global logger helper object
 const Debug = {
     log: (...args) => logger.debug(...args),
+    debug: (...args) => logger.debug(...args),
     info: (...args) => logger.info(...args),
     warn: (...args) => logger.warn(...args),
     error: (...args) => logger.error(...args),
     success: (...args) => logger.success(...args),
     highlight: (...args) => logger.highlight(...args),
+    logRequest: (...args) => logger.logRequest(...args),
+    logResponse: (...args) => logger.logResponse(...args),
     getLogger: () => logger
 };
 
