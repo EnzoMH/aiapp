@@ -263,8 +263,8 @@ async def api_start_crawling(request: Dict[str, Any]):
         
         # Pydantic 모델로 변환하여 검증
         crawl_request = CrawlingRequest(
-            start_date=start_date if not start_date else None,
-            end_date=end_date if not end_date else None,
+            start_date=None if not start_date else start_date,
+            end_date=None if not end_date else end_date,
             keywords=keywords if keywords else [],
             headless=headless,
             client_info=request.get("clientInfo", {})
@@ -276,10 +276,10 @@ async def api_start_crawling(request: Dict[str, Any]):
         # 크롤링 시작
         logger.debug("start_crawling 함수 호출 전")
         result = await start_crawling(
-            crawl_request.start_date, 
-            crawl_request.end_date, 
             crawl_request.keywords, 
-            crawl_request.headless
+            crawl_request.headless,
+            crawl_request.start_date, 
+            crawl_request.end_date
         )
         logger.debug("start_crawling 함수 호출 후 - 결과: %s", result)
         

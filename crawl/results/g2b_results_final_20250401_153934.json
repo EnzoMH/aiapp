@@ -1,0 +1,21 @@
+{
+  "status": "completed",
+  "message": "크롤링이 완료되었습니다.",
+  "total_keywords": 3,
+  "processed_keywords": 0,
+  "total_items": 0,
+  "error_count": 3,
+  "started_at": "2025-04-01T15:39:30.970296",
+  "completed_at": "2025-04-01T15:39:34.758508",
+  "results": [],
+  "errors": [
+    "키워드 'AI' 크롤링 중 오류: 'G2BCrawler' object has no attribute 'crawl_keyword'",
+    "키워드 'AR' 크롤링 중 오류: 'G2BCrawler' object has no attribute 'crawl_keyword'",
+    "키워드 'VR' 크롤링 중 오류: 'G2BCrawler' object has no attribute 'crawl_keyword'"
+  ],
+  "metadata": {
+    "saved_at": "2025-04-01T15:39:34.759510",
+    "is_final": true,
+    "headless": false
+  }
+}

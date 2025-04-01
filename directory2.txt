@@ -1,0 +1,100 @@
+PROGEN-CRAWL/
+├── static/                      # 정적 파일 디렉토리
+│   ├── js/
+│   │   ├── crawl.js            # 크롤링 페이지 메인 스크립트 (730줄)
+│   │   ├── home.js             # 홈페이지 스크립트 (900줄)
+│   │   ├── crawlutil/          # 크롤링 유틸리티 모듈
+│   │   │   ├── index.js        # 크롤링 유틸리티 진입점 (35줄)
+│   │   │   ├── api-service.js  # API 호출 서비스 (420줄)
+│   │   │   ├── websocket.js    # WebSocket 관리 클래스 (256줄)
+│   │   │   ├── logger.js       # 로깅 유틸리티 (318줄)
+│   │   │   └── dom-helper.js   # DOM 조작 헬퍼 함수 (218줄)
+│   │   └── home/               # 홈페이지 관련 모듈
+│   ├── css/
+│   │   └── crawl.css           # 크롤링 페이지 스타일
+│   └── crawl.html              # 크롤링 페이지 HTML
+│
+├── backend/                     # 백엔드 코어 디렉토리
+│   ├── __init__.py              # 패키지 초기화 파일
+│   ├── crawl.py                # 크롤링 기능 컨트롤러 (243줄)
+│   ├── login.py                # 로그인/인증 관련 유틸리티 (110줄)
+│   ├── dbtest.py               # 데이터베이스 테스트 (29줄)
+│   ├── utils/                  # 유틸리티 함수 디렉토리
+│   │   ├── __init__.py        
+│   │   ├── crawl/              # 크롤러 관련 파일
+│   │   │   ├── __init__.py     # 패키지 초기화 (40줄)
+│   │   │   ├── README.md       # 크롤링 모듈 문서 (125줄)
+│   │   │   ├── models.py       # 크롤링 데이터 모델 (110줄)
+│   │   │   ├── crawler.py      # 나라장터 크롤러 구현 (442줄)
+│   │   │   ├── crawler_manager.py  # 크롤러 관리자 클래스 (339줄)
+│   │   │   ├── ai_agent.py     # AI 에이전트 통합 모듈 (306줄)
+│   │   │   ├── ai_agent/       # AI 에이전트 크롤링 구현
+│   │   │   │   ├── __init__.py # 패키지 초기화 (16줄)
+│   │   │   │   ├── crawler.py  # AI 에이전트 크롤러 구현 (501줄)
+│   │   │   │   ├── api_client.py  # AI 모델 API 클라이언트 (300줄)
+│   │   │   │   ├── crawler_helper.py  # 크롤러 보조 기능 (474줄)
+│   │   │   │   ├── search_processor.py  # 검색 결과 처리 (307줄)
+│   │   │   │   ├── detail_extractor.py  # 상세 정보 추출 (377줄)
+│   │   │   │   ├── websocket_manager.py  # WebSocket 통신 관리 (229줄)
+│   │   │   │   └── prompts.py  # AI 프롬프트 템플릿 (182줄)
+│   │   │   ├── core/           # 코어 컴포넌트
+│   │   │   └── utils/          # 크롤링 유틸리티
+│   │   ├── agent/              # AI 에이전트 관련 파일
+│   │   │   └── ai.py           # AI 관련 핵심 클래스 및 함수
+│   │   └── db/                 # 데이터베이스 관련 파일
+│
+├── crawl/                       # 크롤링 데이터 저장 디렉토리
+├── data/                        # 데이터 저장 디렉토리
+├── export/                      # 내보내기 파일 디렉토리
+├── logs/                        # 로그 파일 디렉토리
+├── test/                        # 테스트 코드 디렉토리
+│
+├── app.py                       # FastAPI 메인 애플리케이션 (583줄)
+├── chat.py                      # 채팅 모듈 (946줄)
+├── dbcon.py                     # 데이터베이스 연결 설정 (194줄)
+├── docpro.py                    # 문서 처리 모듈 (245줄)
+├── debug.py                     # 디버깅 유틸리티 (5줄)
+├── .env                         # 환경 변수 설정
+├── .gitignore                   # Git 무시 파일 목록
+├── README.md                    # 프로젝트 문서 (386줄)
+├── requirements.txt             # 프로젝트 의존성 목록 (25줄)
+├── server.log                   # 서버 로그 파일
+├── crawler.log                  # 크롤러 로그 파일
+└── crawler_manager.log          # 크롤러 관리자 로그 파일
+
+# 크롤링 시스템 핵심 구성요소 설명
+
+## 프론트엔드 (static/js/)
+- crawl.js: 크롤링 페이지의 메인 JavaScript 파일로, 사용자 인터페이스와 크롤링 기능을 처리
+- crawlutil/dom-helper.js: DOM 조작 유틸리티로, UI 요소 제어 및 메시지 표시 기능 제공
+- crawlutil/websocket.js: WebSocket 연결 관리 및 실시간 크롤링 진행 상황 업데이트 처리
+- crawlutil/logger.js: 프론트엔드 로깅 기능으로, 개발자 도구에 디버깅 메시지 출력
+- crawlutil/api-service.js: 백엔드 API 호출 함수로, 크롤링 시작/중지 등의 요청 처리
+
+## 백엔드 (backend/)
+- crawl.py: 크롤링 기능 제어 모듈로, 앱과 크롤러 간의 인터페이스 역할 수행
+- utils/crawl/crawler.py: 나라장터 웹사이트 크롤링 구현부로, Selenium 기반 자동화 코드
+- utils/crawl/crawler_manager.py: 크롤링 작업 관리 클래스로, 상태 추적 및 WebSocket 통신 처리
+- utils/crawl/models.py: 크롤링 데이터 모델 정의 (Pydantic 기반)
+- utils/crawl/ai_agent/: AI 기반 고급 크롤링 기능 구현 디렉토리
+
+## AI 에이전트 크롤링 (backend/utils/crawl/ai_agent/)
+- crawler.py: AI 에이전트 크롤러 메인 클래스 구현
+- api_client.py: AI 모델(Gemini 등) API 통신 클라이언트
+- crawler_helper.py: 크롤러 작업 지원 유틸리티 함수
+- search_processor.py: 검색 결과 페이지 처리 로직
+- detail_extractor.py: 상세 정보 페이지 데이터 추출 로직
+- websocket_manager.py: AI 에이전트 WebSocket 통신 관리
+- prompts.py: AI 모델에 전송할 프롬프트 템플릿
+
+## 애플리케이션 진입점
+- app.py: FastAPI 기반 웹 서버 애플리케이션 (API 엔드포인트 정의)
+
+# 크롤링 워크플로우
+1. 사용자가 웹 UI(crawl.html)에서 키워드 입력 및 검색 조건 설정
+2. crawl.js에서 api-service.js를 통해 backend API 요청 생성
+3. app.py의 API 엔드포인트가 요청을 받아 backend/crawl.py로 전달
+4. crawler_manager.py에서 새 크롤링 작업 생성 및 관리
+5. crawler.py 또는 ai_agent/crawler.py에서 Selenium으로 웹사이트 접속 및 데이터 수집
+6. WebSocket을 통해 실시간으로 진행 상황 및 결과가 프론트엔드로 전송
+7. dom-helper.js에서 UI를 업데이트하여 사용자에게 진행 상황 표시 
