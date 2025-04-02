@@ -1,6 +1,6 @@
 // crawl.js - 나라장터 크롤링 모듈
 import { Debug } from './crawlutil/logger.js';
-import WebSocketManager from './crawlutil/websocket.js';
+import { CrawlWebSocketManager, AgentWebSocketManager } from './websocket.js';
 import DomUtils from './crawlutil/dom-helper.js';
 import * as ApiService from './crawlutil/api-service.js';
 
@@ -13,8 +13,6 @@ document.addEventListener('DOMContentLoaded', () => {
     // WebSocket 연결
     let standardWebSocketManager = null;
     let agentWebSocketManager = null;
-    const wsUrl = `ws://${window.location.host}/ws`;
-    const agentWsUrl = `ws://${window.location.host}/ws/agent`;
     
     // 초기화 함수 선언
     function initialize() {
@@ -77,6 +75,9 @@ document.addEventListener('DOMContentLoaded', () => {
             // 이벤트 리스너 설정 - 각 버튼이 있는 경우에만 리스너 추가
             setupEventListeners(requiredButtons);
             
+            // 초기 상태 조회
+            loadInitialStatus();
+            
             Debug.info('initialize 함수 실행 완료');
             
             // 모든 필수 요소가 존재하는 경우에만 true 반환
@@ -85,6 +86,94 @@ document.addEventListener('DOMContentLoaded', () => {
             Debug.error('initialize 함수 실행 중 오류 발생:', error);
             Debug.error('오류 스택:', error.stack);
             return false;
+        }
+    }
+    
+    // 초기 상태 로드
+    async function loadInitialStatus() {
+        try {
+            Debug.info('초기 크롤링 상태 조회 중...');
+            
+            const statusMessages = document.getElementById('statusMessages');
+            if (statusMessages) {
+                DomUtils.appendMessage(statusMessages, '현재 크롤링 상태 확인 중...', 'info');
+            }
+            
+            // 서버에서 크롤링 상태 조회
+            const response = await ApiService.getCrawlingStatus();
+            
+            if (response && response.success) {
+                Debug.info('초기 상태 조회 성공:', response);
+                
+                // 상태 메시지 표시
+                if (statusMessages) {
+                    if (response.data && response.data.is_running) {
+                        DomUtils.appendMessage(statusMessages, `크롤링이 실행 중입니다. (${response.data.processed_keywords || 0}/${response.data.total_keywords || 0} 키워드 처리됨)`, 'info');
+                    } else {
+                        DomUtils.appendMessage(statusMessages, '크롤링이 실행 중이 아닙니다.', 'info');
+                    }
+                }
+                
+                // 결과가 있으면 테이블에 표시
+                if (response.results && response.results.length > 0) {
+                    Debug.info(`${response.results.length}개의 기존 결과 표시`);
+                    updateResultsTable(response.results);
+                    
+                    // 결과 카운트 업데이트
+                    const resultCount = document.getElementById('resultCount');
+                    if (resultCount) {
+                        resultCount.textContent = response.results.length;
+                    }
+                }
+                
+                // 상태 바 업데이트
+                updateStatusBar(response.data);
+            } else {
+                Debug.warn('초기 상태 조회 실패:', response);
+                if (statusMessages) {
+                    DomUtils.appendMessage(statusMessages, '크롤링 상태 조회 실패. 서버 연결을 확인하세요.', 'warning');
+                }
+            }
+        } catch (error) {
+            Debug.error('초기 상태 조회 중 오류 발생:', error);
+            const statusMessages = document.getElementById('statusMessages');
+            if (statusMessages) {
+                DomUtils.appendMessage(statusMessages, '서버 연결 오류. 서버가 실행 중인지 확인하세요.', 'error');
+            }
+        }
+    }
+    
+    // 상태 바 업데이트
+    function updateStatusBar(data) {
+        try {
+            if (!data) return;
+            
+            const progressBar = document.getElementById('progressBar');
+            const progressPercent = document.getElementById('progressPercent');
+            const progressStatus = document.getElementById('progressStatus');
+            
+            if (progressBar && progressPercent && progressStatus) {
+                let percentValue = 0;
+                
+                if (data.is_running && data.total_keywords > 0) {
+                    percentValue = Math.min(Math.round((data.processed_keywords / data.total_keywords) * 100), 100);
+                } else if (data.completed_at) {
+                    percentValue = 100;
+                }
+                
+                progressBar.style.width = `${percentValue}%`;
+                progressPercent.textContent = `${percentValue}%`;
+                
+                if (data.is_running) {
+                    progressStatus.textContent = `크롤링 진행 중... (${data.processed_keywords || 0}/${data.total_keywords || 0})`;
+                } else if (data.completed_at) {
+                    progressStatus.textContent = '크롤링 완료';
+                } else {
+                    progressStatus.textContent = '준비 중...';
+                }
+            }
+        } catch (error) {
+            Debug.error('상태 바 업데이트 중 오류 발생:', error);
         }
     }
     
@@ -129,6 +218,15 @@ document.addEventListener('DOMContentLoaded', () => {
         Debug.info('이벤트 리스너 설정 시작');
         
         try {
+            // API 검색 버튼
+            const apiSearchBtn = document.getElementById('apiSearchBtn');
+            if (apiSearchBtn) {
+                apiSearchBtn.addEventListener('click', () => {
+                    searchAPI();
+                });
+                Debug.info('API 검색 버튼 이벤트 리스너 설정 완료');
+            }
+            
             // 크롤링 시작 버튼
             if (buttons.startBtn) {
                 buttons.startBtn.addEventListener('click', () => {
@@ -188,15 +286,29 @@ document.addEventListener('DOMContentLoaded', () => {
             
             // 디버깅 정보 - 현재 URL
             Debug.debug(`현재 URL: ${window.location.href}`);
-            Debug.debug(`WebSocket URL: ${wsUrl}`);
             
-            // WebSocket 매니저 인스턴스 생성 (수정된 생성자 형식 적용)
-            standardWebSocketManager = new WebSocketManager(
-                wsUrl,
-                updateStatus,
-                'connectionStatus',
-                handleWebSocketError
-            );
+            // CrawlWebSocketManager 인스턴스 생성
+            standardWebSocketManager = new CrawlWebSocketManager({
+                onMessage: updateStatus,
+                statusElement: 'connectionStatus',
+                onError: handleWebSocketError,
+                onOpen: () => {
+                    Debug.info('표준 WebSocket 연결 성공');
+                    const connectionStatus = document.getElementById('connectionStatus');
+                    if (connectionStatus) {
+                        connectionStatus.textContent = '연결됨';
+                        connectionStatus.className = 'badge bg-success';
+                    }
+                },
+                onClose: () => {
+                    Debug.info('표준 WebSocket 연결 종료');
+                    const connectionStatus = document.getElementById('connectionStatus');
+                    if (connectionStatus) {
+                        connectionStatus.textContent = '연결 종료됨';
+                        connectionStatus.className = 'badge bg-secondary';
+                    }
+                }
+            });
             
             // WebSocket 연결 시작
             standardWebSocketManager.connect();
@@ -221,15 +333,29 @@ document.addEventListener('DOMContentLoaded', () => {
             
             // 디버깅 정보 - 현재 URL
             Debug.debug(`현재 URL: ${window.location.href}`);
-            Debug.debug(`에이전트 WebSocket URL: ${agentWsUrl}`);
             
-            // WebSocket 매니저 인스턴스 생성 (수정된 생성자 형식 적용)
-            agentWebSocketManager = new WebSocketManager(
-                agentWsUrl,
-                updateAgentStatus,
-                'agentConnectionStatus',
-                handleAgentWebSocketError
-            );
+            // AgentWebSocketManager 인스턴스 생성
+            agentWebSocketManager = new AgentWebSocketManager({
+                onMessage: updateAgentStatus,
+                statusElement: 'agentConnectionStatus',
+                onError: handleAgentWebSocketError,
+                onOpen: () => {
+                    Debug.info('에이전트 WebSocket 연결 성공');
+                    const agentConnectionStatus = document.getElementById('agentConnectionStatus');
+                    if (agentConnectionStatus) {
+                        agentConnectionStatus.textContent = '연결됨';
+                        agentConnectionStatus.className = 'badge bg-success';
+                    }
+                },
+                onClose: () => {
+                    Debug.info('에이전트 WebSocket 연결 종료');
+                    const agentConnectionStatus = document.getElementById('agentConnectionStatus');
+                    if (agentConnectionStatus) {
+                        agentConnectionStatus.textContent = '연결 종료됨';
+                        agentConnectionStatus.className = 'badge bg-secondary';
+                    }
+                }
+            });
             
             // WebSocket 연결 시작
             agentWebSocketManager.connect();
@@ -375,6 +501,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 return;
             }
             
+            Debug.debug('결과 첫번째 항목:', results[0]);
+            
             // 각 결과 행 생성
             results.forEach((item, index) => {
                 const row = document.createElement('tr');
@@ -386,21 +514,21 @@ document.addEventListener('DOMContentLoaded', () => {
                 
                 // 입찰번호 셀
                 const bidIdCell = document.createElement('td');
-                bidIdCell.textContent = item.bid_id || '-';
+                bidIdCell.textContent = item.bid_number || item.bid_info?.number || '-';
                 row.appendChild(bidIdCell);
                 
                 // 공고명 셀
                 const titleCell = document.createElement('td');
                 const titleLink = document.createElement('a');
                 titleLink.href = item.url || '#';
-                titleLink.textContent = item.title || '제목 없음';
+                titleLink.textContent = item.bid_name || item.title || item.bid_info?.title || '제목 없음';
                 titleLink.target = '_blank';
                 titleCell.appendChild(titleLink);
                 row.appendChild(titleCell);
                 
                 // 발주처 셀
                 const organizationCell = document.createElement('td');
-                organizationCell.textContent = item.organization || '-';
+                organizationCell.textContent = item.org_name || item.organization || item.bid_info?.agency || '-';
                 row.appendChild(organizationCell);
                 
                 // 입찰유형 셀
@@ -410,7 +538,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 
                 // 공고일자 셀
                 const dateCell = document.createElement('td');
-                dateCell.textContent = item.date || '-';
+                dateCell.textContent = item.date || item.deadline || item.bid_info?.date || '-';
                 row.appendChild(dateCell);
                 
                 // 행 추가
@@ -706,6 +834,44 @@ document.addEventListener('DOMContentLoaded', () => {
             if (agentStatus) {
                 DomUtils.appendMessage(agentStatus, 'AI 에이전트 크롤링 중지 요청 중 오류가 발생했습니다.', 'error');
             }
+        }
+    }
+    
+    // API 검색 수행
+    async function searchAPI() {
+        try {
+            Debug.info('나라장터 API 검색 시작');
+            
+            // DOM 요소 참조 가져오기
+            const statusMessages = document.getElementById('statusMessages');
+            
+            // 상태 메시지 표시
+            if (statusMessages) {
+                statusMessages.innerHTML = '';
+                DomUtils.appendMessage(statusMessages, "나라장터 API 기능이 비활성화되었습니다. (SERVICE ERROR)", 'error');
+                DomUtils.appendMessage(statusMessages, "해당 기능은 현재 지원되지 않습니다. 다른 검색 방법을 이용해주세요.", 'warning');
+            }
+            
+            // 결과 테이블 초기화
+            updateResultsTable([]);
+            
+            // 결과 개수 업데이트
+            const resultCountElement = document.getElementById('resultCount');
+            if (resultCountElement) {
+                resultCountElement.textContent = 0;
+            }
+            
+            return false;
+        } catch (error) {
+            Debug.error('API 검색 중 오류:', error);
+            
+            // 상태 메시지 표시
+            const statusMessages = document.getElementById('statusMessages');
+            if (statusMessages) {
+                DomUtils.appendMessage(statusMessages, `오류가 발생했습니다: ${error.message}`, 'error');
+            }
+            
+            return false;
         }
     }
     

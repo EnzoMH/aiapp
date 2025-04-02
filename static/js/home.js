@@ -1,6 +1,19 @@
 // home.js - 개선된 홈페이지 기능
 // 모듈 구조로 리팩토링 됨 - /static/js/home/ 폴더의 모듈 참조
 
+// 전역 변수
+// 폴백: WebSocket 대신 ChatWebSocketManager 사용
+import { ChatWebSocketManager } from '/static/js/websocket.js';
+
+let isProcessing = false; // 메시지 처리 중 상태
+let currentModel = 'claude'; // 현재 선택된 모델
+let currentSessionId = null; // 현재 세션 ID
+let uploadedFiles = new Map(); // 업로드된 파일 목록
+let userLoggedIn = false; // 사용자 로그인 상태
+
+// ChatWebSocketManager 인스턴스 생성
+let chatWs = null;
+
 // 페이지 로드 이벤트 리스너
 document.addEventListener('DOMContentLoaded', function() {
     // 토큰 확인
@@ -61,19 +74,38 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 });
 
-// UI 초기화 함수 (폴백용)
+// 홈 UI 초기화
 function initHomeUI() {
-    // 사용자 정보 로드 및 UI 업데이트
-    loadUserInfo();
-    
-    // 이벤트 리스너 설정
-    setupEventListeners();
-    
-    // WebSocket 연결 초기화
-    initializeWebSocket();
+    // 로그인 상태 확인
+    const token = localStorage.getItem('access_token');
+    if (!token) {
+        window.location.href = '/';
+        return;
+    }
+
+    // 사용자 정보 로드
+    loadUserInfo()
+        .then(() => {
+            // UI 초기화 및 이벤트 리스너 설정
+            setupEventListeners();
+            
+            // 웹소켓 초기화
+            initializeWebSocket();
+            
+            // 메시지 입력창 포커스
+            focusMessageInput();
+        })
+        .catch(error => {
+            console.error('사용자 정보 로드 실패:', error);
+            showToast('error', '사용자 정보를 로드할 수 없습니다');
+            // 로그인 페이지로 리디렉션
+            setTimeout(() => {
+                window.location.href = '/';
+            }, 2000);
+        });
 }
 
-// 폴백: JWT 토큰 디코딩 함수
+// JWT 토큰 파싱
 function parseJwt(token) {
     try {
         const base64Url = token.split('.')[1];
@@ -81,15 +113,14 @@ function parseJwt(token) {
         const jsonPayload = decodeURIComponent(atob(base64).split('').map(function(c) {
             return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
         }).join(''));
-        
         return JSON.parse(jsonPayload);
     } catch (e) {
         console.error('JWT 파싱 오류:', e);
-        return { sub: '', role: '' };
+        return null;
     }
 }
 
-// 폴백: 로그인 처리 함수
+// 로그인 폴백 처리 (로그인 실패 시 호출)
 async function handleLoginFallback(form) {
     form.addEventListener('submit', async function(event) {
         event.preventDefault();
@@ -147,111 +178,86 @@ async function handleLoginFallback(form) {
     });
 }
 
-// 폴백: WebSocket 관련 변수
-let ws = null;
-let currentModel = 'meta';
-let uploadedFiles = new Map();
-let isProcessing = false;
-let currentSessionId = null;
-let reconnectAttempts = 0;
-const maxReconnectAttempts = 5;
-
-// 폴백: 에러 메시지 표시
+// 오류 메시지 표시
 function showError(message) {
-    const errorMessage = document.getElementById('errorMessage');
-    if (errorMessage) {
-        errorMessage.textContent = message;
-        errorMessage.classList.remove('hidden');
+    const errorMessageElement = document.getElementById('errorMessage');
+    if (errorMessageElement) {
+        errorMessageElement.textContent = message;
+        errorMessageElement.classList.remove('hidden');
     }
 }
 
-// 폴백: 토스트 알림 표시
+// 토스트 메시지 표시
 function showToast(type, message) {
-    // 토스트 컨테이너 확인/생성
-    let container = document.getElementById('toast-container');
-    if (!container) {
-        container = document.createElement('div');
-        container.id = 'toast-container';
-        container.className = 'toast-container';
-        document.body.appendChild(container);
+    // 토스트 컨테이너 가져오기 또는 생성
+    let toastContainer = document.querySelector('.toast-container');
+    if (!toastContainer) {
+        toastContainer = document.createElement('div');
+        toastContainer.className = 'toast-container';
+        document.body.appendChild(toastContainer);
     }
     
-    // 토스트 엘리먼트 생성
+    // 토스트 요소 생성
     const toast = document.createElement('div');
     toast.className = `toast ${type}`;
     toast.textContent = message;
+    toastContainer.appendChild(toast);
     
-    // 컨테이너에 추가
-    container.appendChild(toast);
-    
-    // 자동 제거 타이머 설정
+    // 3초 후 토스트 제거
     setTimeout(() => {
         toast.classList.add('fade-out');
-        setTimeout(() => toast.remove(), 300);
+        setTimeout(() => {
+            toastContainer.removeChild(toast);
+        }, 300);
     }, 3000);
 }
 
-// 폴백: 로그아웃 처리
+// 로그아웃 처리
 function handleLogout() {
     localStorage.removeItem('access_token');
-    localStorage.removeItem('user_id');
-    localStorage.removeItem('user_role');
+    localStorage.removeItem('user_info');
     window.location.href = '/';
 }
 
-// 폴백: 사용자 정보 로드 및 UI 업데이트
+// 사용자 정보 로드
 async function loadUserInfo() {
     const token = localStorage.getItem('access_token');
-    const userRole = localStorage.getItem('user_role');
-    const userId = localStorage.getItem('user_id');
-    
-    console.log('토큰 확인:', token ? token.substring(0, 10) + '...' : 'null');
-    console.log('사용자 역할:', userRole);
-    console.log('사용자 ID:', userId);
-    
-    if (!token || !userRole || !userId) {
-        console.warn('필요한 사용자 정보가 없습니다. 로그아웃합니다.');
-        handleLogout();
-        return;
+    if (!token) {
+        throw new Error('토큰이 없습니다');
     }
     
-    // 사용자 정보 표시
-    const userInfo = document.getElementById('userInfo');
-    if (userInfo) {
-        userInfo.textContent = `${userId} (${userRole})`;
-    }
-    
-    // 관리자 메뉴 표시 설정
-    const adminSection = document.getElementById('adminSection');
-    if (adminSection && userRole === 'admin') {
-        adminSection.classList.remove('hidden');
-    }
-    
-    // 서버에서 현재 사용자 정보 검증
     try {
-        console.log('서버에 인증 요청 보내는 중...');
         const response = await fetch('/api/me', {
             headers: {
                 'Authorization': `Bearer ${token}`
             }
         });
         
-        console.log('서버 응답 상태:', response.status);
-        
         if (!response.ok) {
-            console.warn('토큰이 유효하지 않습니다. 로그아웃합니다.');
-            handleLogout();
-        } else {
-            const userData = await response.json();
-            console.log('사용자 데이터:', userData);
+            throw new Error('사용자 정보를 가져올 수 없습니다');
         }
+        
+        const userData = await response.json();
+        console.log('사용자 정보 로드 완료:', userData);
+        
+        // 사용자 정보 저장
+        localStorage.setItem('user_info', JSON.stringify(userData));
+        
+        // 사용자 역할에 따른 UI 처리
+        if (userData.role === 'admin') {
+            const adminSection = document.getElementById('adminSection');
+            if (adminSection) adminSection.classList.remove('hidden');
+        }
+        
+        userLoggedIn = true;
+        return userData;
     } catch (error) {
-        console.error('Error verifying user:', error);
-        showToast('error', '사용자 인증에 실패했습니다');
+        console.error('사용자 정보 로드 오류:', error);
+        throw error;
     }
 }
 
-// 폴백: 이벤트 리스너 설정 함수
+// 이벤트 리스너 설정
 function setupEventListeners() {
     // 로그아웃 버튼
     const logoutBtn = document.getElementById('logoutBtn');
@@ -347,48 +353,43 @@ function setupEventListeners() {
     }
 }
 
-// 폴백: WebSocket 초기화 함수
+// WebSocket 초기화 함수
 function initializeWebSocket() {
-    if (ws && ws.readyState === WebSocket.OPEN) {
-        return;
+    // 기존 WebSocket 대신 ChatWebSocketManager 사용
+    if (chatWs) {
+        return; // 이미 초기화된 경우
     }
     
     // 토큰 가져오기
     const token = localStorage.getItem('access_token');
-    const tokenParam = token ? `?token=${token}` : '';
     
-    ws = new WebSocket(`ws://${window.location.host}/chat${tokenParam}`);
-    
-    ws.onopen = () => {
-        console.log('WebSocket connected');
-        showToast('success', '서버에 연결되었습니다');
-        reconnectAttempts = 0;
-    };
-    
-    ws.onclose = () => {
-        console.log('WebSocket disconnected');
-        if (reconnectAttempts < maxReconnectAttempts) {
-            const delay = Math.min(1000 * Math.pow(2, reconnectAttempts), 10000);
-            showToast('info', `재연결 시도 중... (${reconnectAttempts + 1}/${maxReconnectAttempts})`);
-            setTimeout(initializeWebSocket, delay);
-            reconnectAttempts++;
-        } else {
-            showToast('error', '서버 연결에 실패했습니다. 페이지를 새로고침해주세요.');
+    // ChatWebSocketManager 인스턴스 생성
+    chatWs = new ChatWebSocketManager({
+        onMessage: handleWebSocketMessage,
+        onOpen: () => {
+            console.log('WebSocket connected');
+            showToast('success', '서버에 연결되었습니다');
+        },
+        onClose: () => {
+            console.log('WebSocket disconnected');
+            showToast('info', '서버 연결이 종료되었습니다');
+        },
+        onError: (error) => {
+            console.error('WebSocket error:', error);
+            showToast('error', '서버 연결에 문제가 발생했습니다');
+        },
+        params: {
+            token: token
         }
-    };
+    });
     
-    ws.onerror = (error) => {
-        console.error('WebSocket error:', error);
-        showToast('error', '서버 연결에 문제가 발생했습니다');
-    };
-    
-    ws.onmessage = handleWebSocketMessage;
+    // 연결 시작
+    chatWs.connect();
 }
 
-// 폴백: WebSocket 메시지 수신 처리
-function handleWebSocketMessage(event) {
+// WebSocket 메시지 수신 처리
+function handleWebSocketMessage(data, event) {
     try {
-        const data = JSON.parse(event.data);
         console.log('WebSocket 메시지 수신:', data);
         
         switch (data.type) {
@@ -431,18 +432,29 @@ function handleWebSocketMessage(event) {
     }
 }
 
-// 폴백: WebSocket 메시지 전송 함수
+// WebSocket 메시지 전송 함수
 function sendWebSocketMessage(message) {
-    if (ws && ws.readyState === WebSocket.OPEN) {
-        ws.send(JSON.stringify(message));
-    } else {
-        showToast('error', '서버 연결이 끊어졌습니다');
+    if (!chatWs) {
+        showToast('error', '서버에 연결되어 있지 않습니다');
         isProcessing = false;
         enableMessageInput();
+        return;
     }
+    
+    // ChatWebSocketManager를 사용하여 메시지 전송
+    chatWs.sendMessage({
+        message: message,
+        onSuccess: () => console.log('메시지 전송 성공'),
+        onError: (error) => {
+            console.error('메시지 전송 실패:', error);
+            showToast('error', '메시지 전송에 실패했습니다');
+            isProcessing = false;
+            enableMessageInput();
+        }
+    });
 }
 
-// 폴백: 메시지 전송 함수
+// 메시지 전송 함수
 function sendMessage() {
     if (isProcessing) return;
     

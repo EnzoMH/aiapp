@@ -85,7 +85,7 @@ class CrawlerManager:
         """결과 데이터 전송"""
         await self.send_to_all_clients({
             "type": "result",
-            "results": result_data["results"][:10],  # 첫 10개 결과만 전송
+            "results": result_data["results"],  # 모든 결과 전송
             "total_results": len(result_data["results"]),
             "timestamp": datetime.now().isoformat()
         })

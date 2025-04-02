@@ -19,6 +19,7 @@ from selenium.common.exceptions import (
     ElementClickInterceptedException
 )
 from selenium.webdriver.common.keys import Keys
+from selenium.webdriver.common.action_chains import ActionChains
 
 import os
 import time
@@ -270,11 +271,16 @@ class G2BCrawler:
             all_windows = self.driver.window_handles
             
             # 팝업 윈도우 닫기
+            popup_count = 0
             for window in all_windows:
                 if window != main_window:
                     self.driver.switch_to.window(window)
                     self.driver.close()
-                    logger.info("팝업창 닫기 성공")
+                    popup_count += 1
+                    logger.info(f"윈도우 팝업 닫기 성공 ({popup_count})")
+            
+            if popup_count > 0:
+                logger.info(f"총 {popup_count}개의 윈도우 팝업을 닫았습니다.")
             
             # 메인 윈도우로 복귀
             self.driver.switch_to.window(main_window)
@@ -284,30 +290,70 @@ class G2BCrawler:
                 # 제공된 XPath 기반으로 닫기 버튼 찾기
                 popup_close_buttons = []
                 
-                # 일반적인 닫기 버튼 선택자
-                popup_close_buttons.extend(self.driver.find_elements(By.CSS_SELECTOR, ".w2window_close, .close, [aria-label='창닫기']"))
+                # 팝업 확인을 위한 다양한 방법 시도 (순서 중요)
                 
-                # 나라장터 특정 공지사항 팝업 닫기 버튼
+                # 1. WebDriverWait로 팝업 창 닫기 버튼을 명시적으로 찾아보기
+                try:
+                    # 공지사항 팝업 닫기 (가장 일반적인 팝업)
+                    notice_close = WebDriverWait(self.driver, 3).until(
+                        EC.element_to_be_clickable((By.XPATH, "//div[contains(@class,'w2window')]//button[contains(@class,'w2window_close')]"))
+                    )
+                    notice_close.click()
+                    logger.info("공지사항 팝업 닫기 성공")
+                    await asyncio.sleep(0.5)
+                except Exception:
+                    logger.debug("공지사항 팝업이 없거나 닫기 실패")
+                
+                # 2. 일반적인 닫기 버튼 선택자
+                popup_close_buttons.extend(self.driver.find_elements(By.CSS_SELECTOR, ".w2window_close, .close, [aria-label='창닫기'], .popup_close"))
+                
+                # 3. 나라장터 특정 공지사항 팝업 닫기 버튼
                 popup_close_buttons.extend(self.driver.find_elements(By.XPATH, "//button[contains(@id, 'poupR') and contains(@id, '_close')]"))
                 popup_close_buttons.extend(self.driver.find_elements(By.XPATH, "//button[contains(@class, 'w2window_close_acc') and @aria-label='창닫기']"))
                 
-                # ID 패턴 기반 닫기 버튼 찾기
+                # 4. ID 패턴 기반 닫기 버튼 찾기
                 popup_close_buttons.extend(self.driver.find_elements(By.CSS_SELECTOR, "[id*='poupR'][id$='_close']"))
+                
+                # 5. iframe 내부 팝업 처리
+                iframe_elements = self.driver.find_elements(By.TAG_NAME, "iframe")
+                for iframe in iframe_elements:
+                    try:
+                        iframe_id = iframe.get_attribute("id")
+                        if iframe_id:
+                            logger.debug(f"iframe 확인: {iframe_id}")
+                            self.driver.switch_to.frame(iframe)
+                            iframe_close_buttons = self.driver.find_elements(By.CSS_SELECTOR, ".close, .popup_close, [aria-label='창닫기']")
+                            for btn in iframe_close_buttons:
+                                popup_close_buttons.append(btn)
+                            self.driver.switch_to.default_content()
+                    except Exception as iframe_err:
+                        logger.debug(f"iframe 접근 실패 (무시): {str(iframe_err)}")
+                        self.driver.switch_to.default_content()
                 
                 # 찾은 모든 버튼 클릭 시도
                 closed_count = 0
                 for button in popup_close_buttons:
                     try:
-                        logger.info(f"팝업 닫기 버튼 발견: {button.get_attribute('id')}")
+                        button_id = button.get_attribute('id') or "알 수 없음"
+                        logger.info(f"팝업 닫기 버튼 발견 (ID: {button_id}), 클릭 시도...")
                         button.click()
                         closed_count += 1
-                        logger.info("페이지 내 팝업창 닫기 성공")
+                        logger.info(f"페이지 내 팝업창 닫기 성공: {button_id}")
                         await asyncio.sleep(0.5)  # 약간의 지연
                     except Exception as e:
-                        logger.debug(f"팝업 버튼 클릭 실패 (무시 가능): {str(e)}")
+                        logger.debug(f"팝업 버튼 클릭 실패 (무시): {str(e)}")
                 
                 if closed_count > 0:
-                    logger.info(f"총 {closed_count}개의 팝업창을 닫았습니다.")
+                    logger.info(f"총 {closed_count}개의 페이지 내 팝업창을 닫았습니다.")
+                
+                # ESC 키를 눌러 혹시 남은 팝업 닫기 시도
+                try:
+                    logger.debug("ESC 키를 눌러 나머지 팝업 닫기 시도")
+                    actions = ActionChains(self.driver)
+                    actions.send_keys(Keys.ESCAPE).perform()
+                    await asyncio.sleep(0.5)
+                except Exception as e:
+                    logger.debug(f"ESC 키 입력 실패 (무시): {str(e)}")
                 
                 # 메인 컨텐츠 영역 클릭해서 포커스 주기
                 try:
@@ -315,8 +361,14 @@ class G2BCrawler:
                     main_content.click()
                     logger.debug("메인 컨텐츠 영역 포커스 설정")
                 except Exception:
-                    pass
-                    
+                    try:
+                        # 대체 방법: 본문 영역 클릭
+                        body = self.driver.find_element(By.TAG_NAME, "body")
+                        body.click()
+                        logger.debug("본문 영역 포커스 설정")
+                    except Exception:
+                        pass
+                
             except Exception as e:
                 logger.warning(f"페이지 내 팝업창 닫기 실패 (무시 가능): {str(e)}")
                 
@@ -328,42 +380,81 @@ class G2BCrawler:
         try:
             logger.info("입찰공고 목록 페이지로 이동 중...")
             
-            # '입찰' 메뉴 클릭
-            await self._click_element_safely(By.ID, "mf_wfm_gnb_wfm_gnbMenu_genDepth1_1_btn_menuLvl1_span")
-            await asyncio.sleep(1)
+            for attempt in range(3):  # 최대 3번 시도
+                try:
+                    # 페이지 안정화를 위한 짧은 대기
+                    await asyncio.sleep(1)
+                    
+                    # 먼저 탭이나 메뉴가 접혀있는지 확인하고 펼치기
+                    try:
+                        # 1. URL로 직접 이동 시도 (대체방법)
+                        if attempt > 0:  # 첫 번째 시도 실패 후 URL 직접 이동 시도
+                            logger.info("URL을 통한 직접 이동 시도")
+                            self.driver.get("https://www.g2b.go.kr:8101/ep/tbid/tbidList.do?taskClCd=5")
+                            await asyncio.sleep(3)
+                            return True
+                        
+                        # 2. 일반 탐색 방법
+                        # '입찰' 메뉴 클릭 (javasciprt 실행으로 시도)
+                        try:
+                            logger.debug("'입찰' 메뉴 클릭 시도 (JS)")
+                            self.driver.execute_script("javascript:clickMenuLvl1('01','mf_wfm_gnb_wfm_gnbMenu');")
+                            await asyncio.sleep(1)
+                        except Exception:
+                            logger.debug("JS 실행 실패, 요소 직접 클릭 시도")
+                            # 직접 요소 클릭 시도
+                            bid_menu = WebDriverWait(self.driver, 5).until(
+                                EC.element_to_be_clickable((By.ID, "mf_wfm_gnb_wfm_gnbMenu_genDepth1_1_btn_menuLvl1_span"))
+                            )
+                            bid_menu.click()
+                            await asyncio.sleep(1)
+                    
+                        # '입찰공고목록' 클릭 (javasciprt 실행으로 시도)
+                        try:
+                            logger.debug("'입찰공고목록' 클릭 시도 (JS)")
+                            self.driver.execute_script("javascript:clickMenuLvl3('0101','mf_wfm_gnb_wfm_gnbMenu');")
+                            await asyncio.sleep(3)
+                        except Exception:
+                            logger.debug("JS 실행 실패, 요소 직접 클릭 시도")
+                            bid_list = WebDriverWait(self.driver, 5).until(
+                                EC.element_to_be_clickable((By.ID, "mf_wfm_gnb_wfm_gnbMenu_genDepth1_1_genDepth2_0_genDepth3_0_btn_menuLvl3_span"))
+                            )
+                            bid_list.click()
+                            await asyncio.sleep(3)
+                        
+                        # 3. 페이지 상태 확인
+                        # 입찰공고목록 페이지 확인 (검색 버튼이 있는지)
+                        try:
+                            search_button = WebDriverWait(self.driver, 5).until(
+                                EC.presence_of_element_located((By.ID, "mf_wfm_container_tacBidPbancLst_contents_tab2_body_btnS0004"))
+                            )
+                            logger.info("입찰공고 목록 페이지 이동 성공")
+                            return True
+                        except Exception:
+                            logger.warning(f"페이지 확인 실패 (재시도 {attempt+1}/3)")
+                            continue
+                            
+                    except Exception as inner_e:
+                        logger.warning(f"탐색 시도 {attempt+1}/3 실패: {str(inner_e)}")
+                        if attempt == 2:  # 마지막 시도에서도 실패
+                            raise
+                        continue
+                
+                except Exception as retry_e:
+                    logger.warning(f"입찰공고 목록 페이지 이동 시도 {attempt+1}/3 실패: {str(retry_e)}")
+                    if attempt == 2:  # 마지막 시도에서도 실패
+                        raise
+                    # 페이지 새로고침 후 재시도
+                    self.driver.refresh()
+                    await asyncio.sleep(3)
+                    await self._close_popups()  # 팝업창 다시 닫기
             
-            # '입찰공고목록' 클릭
-            await self._click_element_safely(By.ID, "mf_wfm_gnb_wfm_gnbMenu_genDepth1_1_genDepth2_0_genDepth3_0_btn_menuLvl3_span")
-            
-            # 페이지 로딩 대기
-            await asyncio.sleep(3)
-            
-            logger.info("입찰공고 목록 페이지 이동 성공")
-            return True
+            # 모든 시도 실패
+            raise Exception("3번의 시도 후에도 입찰공고 목록 페이지 이동 실패")
+        
         except Exception as e:
             logger.error(f"입찰공고 목록 페이지 이동 실패: {str(e)}")
             return False
-    
-    async def _click_element_safely(self, by, selector, timeout=10, attempts=3):
-        """요소를 안전하게 클릭 (여러 번 시도)"""
-        for attempt in range(attempts):
-            try:
-                # 요소가 나타날 때까지 대기
-                element = WebDriverWait(self.driver, timeout).until(
-                    EC.element_to_be_clickable((by, selector))
-                )
-                # 요소 클릭
-                element.click()
-                return True
-            except StaleElementReferenceException:
-                logger.warning(f"요소가 DOM에서 사라짐 - 재시도 중 ({attempt+1}/{attempts})")
-                await asyncio.sleep(1)
-            except Exception as e:
-                logger.warning(f"요소 클릭 실패: {by}={selector}, 오류: {str(e)} - 재시도 중 ({attempt+1}/{attempts})")
-                await asyncio.sleep(1)
-        
-        # 모든 시도 실패
-        raise Exception(f"{attempts}번 시도 후 요소 클릭 실패: {by}={selector}")
     
     async def setup_search_conditions(self):
         """검색 조건 설정"""
@@ -411,13 +502,6 @@ class G2BCrawler:
             logger.debug("검색 전 페이지 안정화를 위한 대기")
             await asyncio.sleep(2)
             
-            # 키워드 검색어 입력 필드 찾기
-            logger.debug("키워드 검색어 입력 필드 찾기 시도")
-            search_input = self.driver.find_element(By.ID, "mf_wfm_container_tacBidPbancLst_contents_tab2_body_txtNmInptKwd_inputExt")
-            search_input.clear()
-            search_input.send_keys(keyword)
-            logger.debug(f"키워드 검색어 필드에 '{keyword}' 입력 완료")
-            
             # 공고명 검색 필드 찾기 및 입력
             try:
                 logger.debug("공고명 검색 필드 찾기 시도")
@@ -431,6 +515,17 @@ class G2BCrawler:
                 logger.debug("공고명 검색 필드에서 탭 키 입력 완료")
             except Exception as e:
                 logger.warning(f"공고명 검색 필드 입력 실패 (계속 진행): {str(e)}")
+                
+                # 대체 방법으로 키워드 검색어 입력 필드 사용
+                try:
+                    logger.debug("키워드 검색어 입력 필드 찾기 시도")
+                    search_input = self.driver.find_element(By.ID, "mf_wfm_container_tacBidPbancLst_contents_tab2_body_txtNmInptKwd_inputExt")
+                    search_input.clear()
+                    search_input.send_keys(keyword)
+                    logger.debug(f"키워드 검색어 필드에 '{keyword}' 입력 완료")
+                except Exception as sub_e:
+                    logger.error(f"모든 검색 필드 입력 실패: {str(sub_e)}")
+                    return []
             
             # UI 업데이트를 위한 짧은 대기
             await asyncio.sleep(1)
@@ -490,7 +585,7 @@ class G2BCrawler:
                         'collected_at': datetime.now().isoformat()
                     }
                     
-                    # 상세 정보 추출 (선택적)
+                    # 상세 정보 추출 (상세 정보 페이지로 이동하여 추출)
                     try:
                         detail_data = await self._safely_navigate_and_extract_detail(row_num)
                         if detail_data:
@@ -582,6 +677,7 @@ class G2BCrawler:
                         logger.warning("테이블이 표시되지 않음. 페이지 복구 시도")
                         if not await self.recover_page_state(None):
                             logger.error("페이지 복구 실패")
+                            # 처음부터 다시 시작
                             await self.navigate_to_bid_list()
                             await self.setup_search_conditions()
                     
@@ -601,10 +697,19 @@ class G2BCrawler:
                     # 키워드 간 대기
                     await asyncio.sleep(2)
                     
-                    # 다음 검색을 위해 입찰공고 목록 페이지로 새로 이동 (옵션)
+                    # 다음 키워드 검색을 위해 검색 페이지 초기화
                     if idx < total_keywords:
-                        await self.navigate_to_bid_list()
-                        await self.setup_search_conditions()
+                        # 검색 필드 초기화
+                        try:
+                            bid_name_input = self.driver.find_element(By.ID, "mf_wfm_container_tacBidPbancLst_contents_tab2_body_bidPbancNm")
+                            bid_name_input.clear()
+                            logger.debug("공고명 검색 필드 초기화 완료")
+                        except Exception as clear_e:
+                            logger.warning(f"공고명 검색 필드 초기화 실패: {str(clear_e)}")
+                            
+                            # 다음 키워드를 위해 새로 입찰공고 페이지로 이동
+                            await self.navigate_to_bid_list()
+                            await self.setup_search_conditions()
                         
                 except Exception as e:
                     logger.error(f"키워드 '{keyword}' 처리 중 오류: {str(e)}")
@@ -612,12 +717,20 @@ class G2BCrawler:
                     
                     # 오류 발생 시 페이지 복구 시도
                     try:
-                        self.driver.back()
-                        await asyncio.sleep(2)
-                        await self.navigate_to_bid_list()
-                        await self.setup_search_conditions()
+                        # 페이지 새로고침 시도
+                        self.driver.refresh()
+                        await asyncio.sleep(3)
+                        
+                        # 복구 시도 후에도 실패하면 처음부터 다시 시작
+                        if not await self._check_table_exists():
+                            await self.navigate_to_bid_list()
+                            await self.setup_search_conditions()
                     except Exception as recover_error:
                         logger.error(f"복구 중 추가 오류: {str(recover_error)}")
+                        # 메인 화면부터 다시 시작
+                        await self.navigate_to_main()
+                        await self.navigate_to_bid_list()
+                        await self.setup_search_conditions()
             
             # 최종 결과 저장
             result_filename = self.save_all_crawling_results()
@@ -799,6 +912,7 @@ class G2BCrawler:
     
     async def _safely_navigate_and_extract_detail(self, row_num: int) -> Dict:
         """안전한 상세 페이지 탐색 및 데이터 추출"""
+        original_window = None
         try:
             # 현재 창 핸들 저장
             original_window = self.driver.current_window_handle
@@ -812,7 +926,7 @@ class G2BCrawler:
             
             # 스크립트로 클릭 실행 (더 안정적)
             self.driver.execute_script("arguments[0].click();", title_element)
-            await asyncio.sleep(2)
+            await asyncio.sleep(3)  # 새 창이 열릴 때까지 충분히 대기
             
             # 2. 새 창이 열렸는지 확인
             new_window = None
@@ -833,16 +947,29 @@ class G2BCrawler:
                 self.driver.close()
                 self.driver.switch_to.window(original_window)
                 logger.info("원래 창으로 복귀 성공")
+                
+                # 원래 창의 상태 확인 및 대기
+                await asyncio.sleep(2)
             else:
                 # 새 창이 아닌 경우 뒤로 가기
                 self.driver.back()
-                await asyncio.sleep(2)
+                await asyncio.sleep(3)  # 충분한 로딩 대기 시간
                 logger.info("상세 페이지에서 뒤로 가기 성공")
             
             # 5. 테이블 상태 확인
-            if not await self._check_table_exists():
-                logger.warning("테이블이 사라짐, 페이지 복구 시도")
-                await self.recover_page_state(None)
+            retries = 3
+            for i in range(retries):
+                if await self._check_table_exists():
+                    logger.info("테이블 상태 확인 완료, 계속 진행")
+                    break
+                else:
+                    logger.warning(f"테이블이 없음, 복구 시도 {i+1}/{retries}")
+                    if i == retries - 1:
+                        # 마지막 시도에서도 실패한 경우, 페이지 복구 시도
+                        await self.recover_page_state(None)
+                    else:
+                        # 일시적인 지연 후 다시 시도
+                        await asyncio.sleep(2)
             
             return detail_data
             
@@ -855,14 +982,15 @@ class G2BCrawler:
                 current_handles = self.driver.window_handles
                 
                 # 원래 창이 아닌 다른 창이 있으면 닫기
-                for handle in current_handles:
-                    if handle != original_window:
-                        self.driver.switch_to.window(handle)
-                        self.driver.close()
-                
-                # 원래 창으로 돌아가기
-                if original_window in current_handles:
-                    self.driver.switch_to.window(original_window)
+                if original_window:
+                    for handle in current_handles:
+                        if handle != original_window:
+                            self.driver.switch_to.window(handle)
+                            self.driver.close()
+                    
+                    # 원래 창으로 돌아가기
+                    if original_window in current_handles:
+                        self.driver.switch_to.window(original_window)
                 
                 # 페이지 상태 복구 시도
                 await self.recover_page_state(None)
@@ -1200,3 +1328,24 @@ class G2BCrawler:
             logger.error(f"키워드 '{keyword}' 크롤링 중 오류: {str(e)}")
             logger.debug(traceback.format_exc())
             return []
+
+    async def _click_element_safely(self, by, selector, timeout=10, attempts=3):
+        """요소를 안전하게 클릭 (여러 번 시도)"""
+        for attempt in range(attempts):
+            try:
+                # 요소가 나타날 때까지 대기
+                element = WebDriverWait(self.driver, timeout).until(
+                    EC.element_to_be_clickable((by, selector))
+                )
+                # 요소 클릭
+                element.click()
+                return True
+            except StaleElementReferenceException:
+                logger.warning(f"요소가 DOM에서 사라짐 - 재시도 중 ({attempt+1}/{attempts})")
+                await asyncio.sleep(1)
+            except Exception as e:
+                logger.warning(f"요소 클릭 실패: {by}={selector}, 오류: {str(e)} - 재시도 중 ({attempt+1}/{attempts})")
+                await asyncio.sleep(1)
+        
+        # 모든 시도 실패
+        raise Exception(f"{attempts}번 시도 후 요소 클릭 실패: {by}={selector}")

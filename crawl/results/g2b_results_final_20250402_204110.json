@@ -1,0 +1,27 @@
+{
+  "status": "completed",
+  "message": "크롤링이 완료되었습니다.",
+  "total_keywords": 3,
+  "processed_keywords": 3,
+  "total_items": 46,
+  "error_count": 0,
+  "started_at": "2025-04-02T20:30:11.664936",
+  "completed_at": "2025-04-02T20:41:10.824629",
+  "results": [
+    {
+      "bid_number": "R25BK00760835000",
+      "bid_name": "의료비품(Automatic Barcode Labeling System) 구매 입찰공고[재공고]",
+      "org_name": null,
+      "deadline": null,
+      "status": null,
+      "url": null,
+      "bid_method": null,
+      "contract_type": null,
+      "bid_type": null,
+      "budget": null,
+      "price_evaluation": null,
+      "location": null,
+      "registration_date": null,
+      "opened_date": null,
+      "search_keyword": "AR",
+      "collected_at": 

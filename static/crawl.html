@@ -124,7 +124,63 @@
                                     <label for="endDate" class="form-label">종료일</label>
                                     <input type="date" class="form-control" id="endDate">
                                 </div>
+                                
+                                <!-- 추가 검색 조건 아코디언 -->
+                                <div class="mb-3">
+                                    <div class="accordion" id="searchOptionsAccordion">
+                                        <div class="accordion-item">
+                                            <h2 class="accordion-header">
+                                                <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#extraSearchOptions" aria-expanded="false" aria-controls="extraSearchOptions">
+                                                    추가 검색 조건
+                                                </button>
+                                            </h2>
+                                            <div id="extraSearchOptions" class="accordion-collapse collapse" data-bs-parent="#searchOptionsAccordion">
+                                                <div class="accordion-body">
+                                                    <div class="mb-2">
+                                                        <label for="orgNameInput" class="form-label">공고기관명</label>
+                                                        <input type="text" class="form-control" id="orgNameInput" placeholder="공고기관명 입력">
+                                                    </div>
+                                                    
+                                                    <div class="mb-2">
+                                                        <label for="contractMethodSelect" class="form-label">계약방법</label>
+                                                        <select class="form-select" id="contractMethodSelect">
+                                                            <option value="">전체</option>
+                                                            <option value="1">일반경쟁</option>
+                                                            <option value="2">제한경쟁</option>
+                                                            <option value="3">지명경쟁</option>
+                                                            <option value="4">수의계약</option>
+                                                        </select>
+                                                    </div>
+                                                    
+                                                    <div class="mb-2">
+                                                        <label class="form-label d-block">입찰 유형</label>
+                                                        <div class="form-check form-check-inline">
+                                                            <input class="form-check-input" type="checkbox" id="typeConstruction" value="공사" checked>
+                                                            <label class="form-check-label" for="typeConstruction">공사</label>
+                                                        </div>
+                                                        <div class="form-check form-check-inline">
+                                                            <input class="form-check-input" type="checkbox" id="typeGoods" value="물품" checked>
+                                                            <label class="form-check-label" for="typeGoods">물품</label>
+                                                        </div>
+                                                        <div class="form-check form-check-inline">
+                                                            <input class="form-check-input" type="checkbox" id="typeService" value="용역" checked>
+                                                            <label class="form-check-label" for="typeService">용역</label>
+                                                        </div>
+                                                        <div class="form-check form-check-inline">
+                                                            <input class="form-check-input" type="checkbox" id="typeForeign" value="외자" checked>
+                                                            <label class="form-check-label" for="typeForeign">외자</label>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                
                                 <div class="d-grid gap-2">
+                                    <button id="apiSearchBtn" class="btn btn-primary" disabled>
+                                        <i class="bi bi-search"></i> API로 검색 <span class="badge bg-danger">비활성화됨</span>
+                                    </button>
                                     <button id="startBtn" class="btn btn-success">
                                         <i class="bi bi-play-fill"></i> 크롤링 시작
                                     </button>

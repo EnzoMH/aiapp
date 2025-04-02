@@ -452,7 +452,6 @@ class ChatManager:
     
     async def connect_client(self, websocket: WebSocket, client_id: str) -> None:
         """클라이언트 연결 처리"""
-        await websocket.accept()
         self.connected_clients[client_id] = websocket
     
     def disconnect_client(self, client_id: str) -> None:

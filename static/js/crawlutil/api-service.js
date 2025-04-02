@@ -417,4 +417,42 @@ export async function getAgentResults() {
             results: []
         };
     }
+}
+
+/**
+ * 나라장터 API 검색 함수
+ * @param {string} keyword - 검색 키워드
+ * @param {string} startDate - 시작 날짜 (YYYY-MM-DD)
+ * @param {string} endDate - 종료 날짜 (YYYY-MM-DD)
+ * @param {string[]} bidTypes - 입찰 유형 배열 ['공사', '물품', '용역', '외자']
+ * @param {string} orgName - 공고기관명 (선택사항)
+ * @param {string} contractMethod - 계약방법 (선택사항)
+ * @param {number} page - 페이지 번호 (기본값: 1)
+ * @param {number} rows - 페이지당 행 수 (기본값: 10)
+ * @returns {Promise<Object>} - API 응답 객체
+ */
+export async function searchAPI(keyword, startDate, endDate, bidTypes = ['공사', '물품', '용역', '외자'], orgName = '', contractMethod = '', page = 1, rows = 10) {
+    try {
+        Debug.info(`나라장터 API 검색 비활성화됨 - 키워드: ${keyword}, 유형: ${bidTypes.join(',')}, 기간: ${startDate || '기본값'} ~ ${endDate || '기본값'}`);
+        
+        // API 비활성화 응답 반환
+        return {
+            success: false,
+            status: 200,
+            message: '나라장터 API 기능이 비활성화되었습니다. (SERVICE ERROR)',
+            error: 'NO_OPENAPI_SERVICE_ERROR',
+            results: [],
+            errors: ['나라장터 API 서비스가 비활성화되었습니다.'],
+            responseTime: 0
+        };
+    } catch (error) {
+        Debug.error('나라장터 API 검색 호출 오류:', error);
+        console.error('상세 오류:', error);
+        return {
+            success: false,
+            message: '네트워크 오류 또는 서버 응답 처리 실패',
+            error: error.message,
+            results: []
+        };
+    }
 } 

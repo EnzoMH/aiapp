@@ -5,7 +5,7 @@ from fastapi.templating import Jinja2Templates
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 import uvicorn
-from datetime import timedelta
+from datetime import timedelta, datetime
 from colorama import init
 from typing import List, Dict, Any
 import os
@@ -38,10 +38,11 @@ fastapi_logger.setLevel(logging.DEBUG)
 uvicorn_logger = logging.getLogger("uvicorn")
 uvicorn_logger.setLevel(logging.DEBUG)
 
-from backend.utils.agent.ai import WebSocketManager, FileHandler
+from backend.utils.agent.ai import FileHandler
 from backend.login import LoginUtils, auth_handler, UserRole
 from chat import ChatManager, MessageHandler, AIModel, MessageRole, ChatMessage, ChatSession
 from backend.crawl import crawling_state, start_crawling, stop_crawling, get_results, get_crawling_status
+from backend.websocket_manager import WebSocketManager, ChatWebSocketEndpoint, CrawlWebSocketEndpoint, AgentWebSocketEndpoint
 
 # SQLAlchemy의 Session 클래스 가져오기
 from sqlalchemy.orm import Session
@@ -78,9 +79,11 @@ templates = Jinja2Templates(directory="static")
 
 # 매니저 초기화
 ACCESS_TOKEN_EXPIRE_MINUTES = 30
-ws_manager = WebSocketManager()
 file_handler = FileHandler()
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="api/login")
+
+# 웹소켓 관리자 초기화
+websocket_manager = WebSocketManager()
 
 # CLI 옵션 처리를 위한 인자 파서 추가
 def parse_args():
@@ -151,96 +154,23 @@ async def get_all_users(
 # WebSocket 엔드포인트
 @app.websocket("/chat")
 async def websocket_endpoint(websocket: WebSocket, token: str = None):
-    # 사용자 인증 처리
-    if token:
-        try:
-            # WebSocket에서는 Depends를 사용할 수 없으므로 직접 세션 생성
-            db = SessionLocal()
-            try:
-                user = await LoginUtils.verify_user(token, db)
-                user_id = user["id"]
-            finally:
-                db.close()
-        except:
-            await websocket.close(code=1008, reason="인증 실패")
-            return
-    else:
-        # 인증 없이 테스트용 (실제 환경에서는 제거)
-        user_id = "anonymous_user"
-    
-    # 클라이언트 연결
-    await chat_manager.connect_client(websocket, user_id)
-    
-    try:
-        # 연결 성공 메시지
-        await websocket.send_json({
-            "type": "connection_established",
-            "data": {"user_id": user_id}
-        })
-        
-        # 메시지 처리 핸들러에 위임
-        await message_handler.handle_message(websocket, user_id)
-            
-    except Exception as e:
-        print(f"WebSocket 오류: {str(e)}")
-    finally:
-        # 연결 종료 시 클라이언트 연결 해제
-        chat_manager.disconnect_client(user_id)
+    # 웹소켓 관리자의 채팅 엔드포인트에 처리 위임
+    endpoint = websocket_manager.get_endpoint("/chat")
+    await endpoint.handle_client(websocket, token)
 
 # 크롤링 WebSocket 엔드포인트
 @app.websocket("/ws")
 async def crawl_websocket_endpoint(websocket: WebSocket):
-    await websocket.accept()
-    crawling_state.add_connection(websocket)
-    
-    try:
-        # 연결 성공 메시지
-        await websocket.send_json({
-            "type": "connection_established",
-            "message": "WebSocket 연결이 설정되었습니다."
-        })
-        
-        # 현재 상태 전송
-        await crawling_state.broadcast_status()
-        
-        # 메시지 수신 대기
-        while True:
-            await websocket.receive_text()  # 클라이언트 메시지 수신
-            
-    except Exception as e:
-        print(f"크롤링 WebSocket 오류: {str(e)}")
-    finally:
-        # 연결 종료 시 제거
-        crawling_state.remove_connection(websocket)
+    # 웹소켓 관리자의 크롤링 엔드포인트에 처리 위임
+    endpoint = websocket_manager.get_endpoint("/ws")
+    await endpoint.handle_client(websocket)
 
 # AI 에이전트 WebSocket 엔드포인트
 @app.websocket("/ws/agent")
 async def agent_websocket_endpoint(websocket: WebSocket):
-    await websocket.accept()
-    
-    try:
-        # 연결 성공 메시지
-        await websocket.send_json({
-            "type": "connection_established",
-            "message": "AI 에이전트 WebSocket 연결이 설정되었습니다."
-        })
-        
-        # AI 에이전트 기능 사용 불가 메시지
-        await websocket.send_json({
-            "type": "notice",
-            "message": "AI 에이전트 기능은 현재 개발 중입니다."
-        })
-        
-        # 연결 유지 및 메시지 수신 대기
-        while True:
-            data = await websocket.receive_text()
-            logger.debug(f"AI 에이전트 메시지 수신 (무시됨): {data[:100]}")
-                
-    except Exception as e:
-        logger.error(f"AI 에이전트 WebSocket 오류: {str(e)}")
-    finally:
-        # 연결 종료 시 처리 (필요한 경우 정리 작업 추가)
-        logger.info("AI 에이전트 WebSocket 연결 종료")
+    # 웹소켓 관리자의 AI 에이전트 엔드포인트에 처리 위임
+    endpoint = websocket_manager.get_endpoint("/ws/agent")
+    await endpoint.handle_client(websocket)
 
 # 크롤링 API 엔드포인트
 @app.post("/api/start")
@@ -368,25 +298,49 @@ async def api_get_crawl_results():
 # 크롤링 상태 확인 API 엔드포인트 추가
 @app.get("/api/status")
 async def api_get_crawling_status():
-    """크롤링 상태 확인 API"""
-    logger.debug("크롤링 상태 확인 API 호출")
+    """
+    크롤링 상태 확인 API
+    
+    Returns:
+        Dict: 현재 크롤링 상태 정보
+    """
     try:
-        from backend.utils.crawl.models import CrawlingResponse
+        logger.debug("크롤링 상태 조회 API 호출")
         
-        logger.info("크롤링 상태 확인 요청 수신")
+        # 크롤링 상태 정보 가져오기
+        status_info = get_crawling_status()
         
-        # backend.crawl 모듈에서 상태 가져오기
-        result = get_crawling_status()
-        logger.debug("get_crawling_status 함수 결과: %s", result)
+        # 응답 구성
+        response = {
+            "status": "success",
+            "message": "크롤링 상태 조회 성공",
+            "data": status_info.get("data", {}),
+            "timestamp": datetime.now().isoformat()
+        }
         
-        return result
+        # 결과가 있으면 함께 반환
+        if crawling_state.is_running:
+            # 실행 중이면 현재까지 수집된 결과 반환
+            results = get_results()
+            response["results"] = results.get("results", [])
+            response["total_items"] = len(results.get("results", []))
+        else:
+            # 실행 중이 아니면 전체 결과 반환
+            results = get_results()
+            response["results"] = results.get("results", [])
+            response["total_items"] = len(results.get("results", []))
+            
+        # 응답 반환
+        logger.debug(f"크롤링 상태 반환: is_running={crawling_state.is_running}, 결과 수={response.get('total_items', 0)}")
+        return response
+    
     except Exception as e:
-        logger.exception(f"크롤링 상태 확인 API 처리 중 예외 발생: {str(e)}")
-        logger.error("상세 오류: %s", traceback.format_exc())
+        logger.exception(f"크롤링 상태 조회 중 오류: {str(e)}")
         return {
             "status": "error",
-            "message": f"서버 오류가 발생했습니다: {str(e)}",
-            "crawling_status": None
+            "message": f"크롤링 상태 조회 중 오류가 발생했습니다: {str(e)}",
+            "data": {},
+            "timestamp": datetime.now().isoformat()
         }
 
 # 크롤링 결과 다운로드 API 엔드포인트 추가
@@ -422,7 +376,6 @@ async def api_download_results():
         output.seek(0)
         
         # 파일 이름 설정
-        from datetime import datetime
         filename = f"crawling_results_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
         logger.debug("엑셀 파일 생성 완료 - 파일명: %s", filename)
         
@@ -547,6 +500,21 @@ async def startup_event():
                     '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
                 ))
     
+    # 웹소켓 엔드포인트 등록
+    logger.debug("웹소켓 엔드포인트 등록")
+    
+    # 채팅 웹소켓 엔드포인트 등록
+    chat_endpoint = ChatWebSocketEndpoint(chat_manager, message_handler, LoginUtils, SessionLocal)
+    websocket_manager.register_endpoint(chat_endpoint)
+    
+    # 크롤링 웹소켓 엔드포인트 등록
+    crawl_endpoint = CrawlWebSocketEndpoint(crawling_state)
+    websocket_manager.register_endpoint(crawl_endpoint)
+    
+    # AI 에이전트 웹소켓 엔드포인트 등록
+    agent_endpoint = AgentWebSocketEndpoint()
+    websocket_manager.register_endpoint(agent_endpoint)
+    
     logger.debug("애플리케이션 초기화 완료")
     print("애플리케이션이 시작되었습니다.")
 
@@ -555,6 +523,16 @@ async def startup_event():
 async def shutdown_event():
     logger.info("=== 애플리케이션 종료 ===")
     print("애플리케이션이 종료되었습니다.")
+
+@app.post("/api/search")
+async def api_search_bids(request: Request):
+    """나라장터 API 검색 엔드포인트"""
+    return {
+        "success": False,
+        "message": "나라장터 API 기능이 비활성화되었습니다. (SERVICE ERROR)",
+        "error": "NO_OPENAPI_SERVICE_ERROR",
+        "results": []
+    }
 
 if __name__ == "__main__":
     init()
