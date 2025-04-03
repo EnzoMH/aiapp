@@ -16,76 +16,77 @@ let chatWs = null;
 
 // 페이지 로드 이벤트 리스너
 document.addEventListener('DOMContentLoaded', function() {
-    // 토큰 확인
-    const token = localStorage.getItem('access_token');
+    // 사용자의 로그인 상태를 먼저 확인
+    const userId = localStorage.getItem('user_id');
+    if (!userId) {
+        console.error('로그인되지 않은 사용자. 로그인 페이지로 이동해야 합니다.');
+        // 페이지 로드 중지
+        return;
+    }
+    
+    // 리디렉션 루프 방지를 위한 체크
+    let loadCount = parseInt(sessionStorage.getItem('home_load_count') || '0');
+    loadCount++;
+    sessionStorage.setItem('home_load_count', loadCount.toString());
+    
+    // 과도한 로드 감지 시 중지
+    if (loadCount > 3) {
+        console.error('과도한 페이지 로드 감지. 초기화 중지.');
+        sessionStorage.removeItem('home_load_count');
+        sessionStorage.removeItem('homeLoaded');
+        
+        document.body.innerHTML = `
+            <div class="min-h-screen flex items-center justify-center bg-gray-100">
+                <div class="bg-white p-8 rounded-lg shadow-md max-w-md w-full text-center">
+                    <h2 class="text-2xl font-bold mb-4 text-red-600">오류가 발생했습니다</h2>
+                    <p class="mb-4">페이지 로드 중 문제가 발생했습니다.</p>
+                    <button id="resetBtn" class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700">
+                        다시 시도
+                    </button>
+                </div>
+            </div>
+        `;
+        
+        document.getElementById('resetBtn').addEventListener('click', function() {
+            // 세션 스토리지 초기화
+            sessionStorage.clear();
+            // 페이지 새로고침
+            window.location.reload();
+        });
+        
+        return;
+    }
+    
     const currentPath = window.location.pathname;
     
-    // 로그인 페이지 로직
-    if (currentPath === '/' || currentPath === '/login') {
-        // 이미 로그인된 상태면 대시보드로 리디렉션
-        if (token) {
-            window.location.href = '/home';
-            return;
-        }
-        
-        // 로그인 폼 처리
-        const loginForm = document.getElementById('loginForm');
-        if (loginForm) {
-            // auth.js의 handleLogin 함수 사용
-            import('./home/auth.js').then(auth => {
-                loginForm.addEventListener('submit', auth.handleLogin);
-            }).catch(err => {
-                console.error('Auth 모듈 로드 실패:', err);
-                // 폴백: 기존 로그인 처리 시도
-                handleLoginFallback(loginForm);
-            });
-        }
-    } 
     // 홈 페이지 로직
-    else if (currentPath === '/home') {
-        // 로그인 안된 상태면 로그인 페이지로 리디렉션
-        if (!token) {
-            window.location.href = '/';
-            return;
-        }
-        
-        // 모듈 로드 및 초기화
-        Promise.all([
-            import('./home/index.js').catch(() => null),
-            import('./home/auth.js').catch(() => null),
-            import('./home/ui.js').catch(() => null),
-            import('./home/chatManager.js').catch(() => null),
-            import('./home/fileManager.js').catch(() => null)
-        ]).then(([homeModule, authModule, uiModule, chatModule, fileModule]) => {
-            if (homeModule && homeModule.initHomeUI) {
-                // index.js의 initHomeUI 함수 사용
-                homeModule.initHomeUI();
-            } else {
-                // 폴백: 기존 함수 사용
-                console.warn('모듈 로드 실패, 폴백 사용');
-                initHomeUI();
-            }
-        }).catch(err => {
-            console.error('모듈 로드 실패:', err);
-            alert('앱 초기화에 실패했습니다. 기존 방식으로 시도합니다.');
-            // 폴백: 기존 함수 사용
-            initHomeUI();
-        });
+    if (currentPath === '/home') {
+        // UI 초기화 (중복 초기화 방지 로직은 initHomeUI 내부에 구현됨)
+        initHomeUI();
     }
 });
 
 // 홈 UI 초기화
 function initHomeUI() {
-    // 로그인 상태 확인
-    const token = localStorage.getItem('access_token');
-    if (!token) {
-        window.location.href = '/';
+    // 초기화 플래그 확인 - 중복 초기화 방지
+    if (window.homeInitialized) {
+        console.log('홈 UI가 이미 초기화됨');
         return;
     }
-
+    
+    // 초기화 플래그 설정
+    window.homeInitialized = true;
+    
     // 사용자 정보 로드
     loadUserInfo()
-        .then(() => {
+        .then((userData) => {
+            if (!userData) {
+                // 로드 실패 시 오류 메시지 표시하고 종료
+                showError('사용자 정보를 로드할 수 없습니다. 다시 로그인해주세요.');
+                document.getElementById('errorContainer').classList.remove('hidden');
+                return;
+            }
+            
             // UI 초기화 및 이벤트 리스너 설정
             setupEventListeners();
             
@@ -94,88 +95,106 @@ function initHomeUI() {
             
             // 메시지 입력창 포커스
             focusMessageInput();
+            
+            // 성공적으로 초기화 완료 - 세션 스토리지 정리
+            sessionStorage.removeItem('home_load_count');
         })
         .catch(error => {
             console.error('사용자 정보 로드 실패:', error);
-            showToast('error', '사용자 정보를 로드할 수 없습니다');
-            // 로그인 페이지로 리디렉션
-            setTimeout(() => {
-                window.location.href = '/';
-            }, 2000);
+            
+            // 오류 종류에 따른 다른 메시지 표시
+            if (error.message === '세션이 만료되었습니다') {
+                showError('세션이 만료되었습니다. 로그아웃 후 다시 로그인해주세요.');
+            } else {
+                showError('사용자 인증에 문제가 발생했습니다. 로그아웃 후 다시 로그인해주세요.');
+            }
+            
+            document.getElementById('errorContainer').classList.remove('hidden');
+            document.getElementById('logoutBtn').classList.add('animate-pulse');
         });
 }
 
-// JWT 토큰 파싱
-function parseJwt(token) {
+// 사용자 정보 로드
+async function loadUserInfo() {
     try {
-        const base64Url = token.split('.')[1];
-        const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
-        const jsonPayload = decodeURIComponent(atob(base64).split('').map(function(c) {
-            return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
-        }).join(''));
-        return JSON.parse(jsonPayload);
-    } catch (e) {
-        console.error('JWT 파싱 오류:', e);
-        return null;
-    }
-}
-
-// 로그인 폴백 처리 (로그인 실패 시 호출)
-async function handleLoginFallback(form) {
-    form.addEventListener('submit', async function(event) {
-        event.preventDefault();
-        
-        const username = document.getElementById('username').value;
-        const password = document.getElementById('password').value;
-        const errorMessage = document.getElementById('errorMessage');
-        
-        if (!username || !password) {
-            showError('아이디와 비밀번호를 모두 입력해주세요.');
-            return;
+        // 재시도 횟수 체크 - 무한 리디렉션 방지
+        const redirectAttempts = parseInt(localStorage.getItem('redirect_attempts') || '0');
+        if (redirectAttempts > 3) {
+            console.error('너무 많은 리디렉션 시도. 사용자 로그아웃.');
+            // 모든 저장 데이터 삭제
+            localStorage.clear();
+            sessionStorage.clear();
+            window.location.replace('/');
+            return null;
         }
         
-        try {
-            const formData = new URLSearchParams();
-            formData.append('username', username);
-            formData.append('password', password);
+        // 세션 기반 인증을 사용하여 사용자 정보 요청
+        const response = await fetch('/api/me', {
+            method: 'GET',
+            credentials: 'include', // 세션 쿠키 포함
+            headers: {
+                'Cache-Control': 'no-cache, no-store, must-revalidate',
+                'Pragma': 'no-cache'
+            }
+        });
+        
+        if (!response.ok) {
+            console.error('사용자 정보 요청 실패:', response.status);
             
-            const response = await fetch('/api/login', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/x-www-form-urlencoded',
-                },
-                body: formData
-            });
+            // 사용자 인증 실패 - 로그아웃 처리 및 로그인 페이지로 이동
+            console.warn('인증 실패 - 로그아웃 처리 중');
             
-            const data = await response.json();
+            // 로컬 스토리지 및 세션 스토리지 정리
+            localStorage.clear();
+            sessionStorage.clear();
             
-            if (!response.ok) {
-                showError(data.detail || '로그인에 실패했습니다.');
-                return;
+            // 백엔드에 로그아웃 요청
+            try {
+                await fetch('/api/logout', {
+                    method: 'POST',
+                    credentials: 'include'
+                });
+            } catch (logoutError) {
+                console.error('로그아웃 처리 중 오류:', logoutError);
             }
             
-            // 로그인 성공
-            localStorage.setItem('access_token', data.access_token);
-            
-            // JWT 토큰에서 사용자 정보 추출
-            const tokenPayload = parseJwt(data.access_token);
-            localStorage.setItem('user_id', tokenPayload.sub);
-            localStorage.setItem('user_role', tokenPayload.role);
-            
-            console.log('로그인 성공:', {
-                token: data.access_token.substring(0, 10) + '...',
-                user_id: tokenPayload.sub,
-                role: tokenPayload.role
-            });
-            
-            // 대시보드로 리디렉션
-            window.location.href = '/home';
-            
-        } catch (error) {
-            showError('서버 연결에 문제가 있습니다. 잠시 후 다시 시도해주세요.');
-            console.error('Login error:', error);
+            // 로그인 페이지로 즉시 이동
+            console.log('로그인 페이지로 이동');
+            window.location.replace('/');
+            return null;
         }
-    });
+        
+        // 성공 시 재시도 횟수 초기화
+        localStorage.removeItem('redirect_attempts');
+        
+        const userData = await response.json();
+        console.log('사용자 정보 로드 완료:', userData);
+        
+        // 사용자 정보 저장
+        localStorage.setItem('user_info', JSON.stringify(userData));
+        
+        // 사용자 역할에 따른 UI 처리
+        if (userData.role === 'admin') {
+            const adminSection = document.getElementById('adminSection');
+            if (adminSection) adminSection.classList.remove('hidden');
+        }
+        
+        // 사용자 정보 UI 업데이트
+        const userInfoElement = document.getElementById('userInfo');
+        if (userInfoElement) {
+            userInfoElement.textContent = `${userData.id} (${userData.role})`;
+        }
+        
+        userLoggedIn = true;
+        return userData;
+    } catch (error) {
+        console.error('사용자 정보 요청 오류:', error);
+        // 예외 발생 시 로그아웃 처리
+        localStorage.clear();
+        sessionStorage.clear();
+        window.location.replace('/');
+        return null;
+    }
 }
 
 // 오류 메시지 표시
@@ -213,47 +232,25 @@ function showToast(type, message) {
 }
 
 // 로그아웃 처리
-function handleLogout() {
-    localStorage.removeItem('access_token');
-    localStorage.removeItem('user_info');
-    window.location.href = '/';
-}
-
-// 사용자 정보 로드
-async function loadUserInfo() {
-    const token = localStorage.getItem('access_token');
-    if (!token) {
-        throw new Error('토큰이 없습니다');
-    }
-    
+async function handleLogout() {
     try {
-        const response = await fetch('/api/me', {
-            headers: {
-                'Authorization': `Bearer ${token}`
-            }
+        // 서버에 로그아웃 요청
+        const response = await fetch('/api/logout', {
+            method: 'POST',
+            credentials: 'include'
         });
         
-        if (!response.ok) {
-            throw new Error('사용자 정보를 가져올 수 없습니다');
-        }
+        // 로컬 스토리지 정리
+        localStorage.removeItem('user_id');
+        localStorage.removeItem('user_role');
+        localStorage.removeItem('user_info');
         
-        const userData = await response.json();
-        console.log('사용자 정보 로드 완료:', userData);
-        
-        // 사용자 정보 저장
-        localStorage.setItem('user_info', JSON.stringify(userData));
-        
-        // 사용자 역할에 따른 UI 처리
-        if (userData.role === 'admin') {
-            const adminSection = document.getElementById('adminSection');
-            if (adminSection) adminSection.classList.remove('hidden');
-        }
-        
-        userLoggedIn = true;
-        return userData;
+        // 로그인 페이지로 리디렉션
+        window.location.href = '/';
     } catch (error) {
-        console.error('사용자 정보 로드 오류:', error);
-        throw error;
+        console.error('로그아웃 오류:', error);
+        // 오류가 발생해도 로그인 페이지로 리디렉션
+        window.location.href = '/';
     }
 }
 
@@ -353,105 +350,98 @@ function setupEventListeners() {
     }
 }
 
-// WebSocket 초기화 함수
+// 웹소켓 초기화
 function initializeWebSocket() {
-    // 기존 WebSocket 대신 ChatWebSocketManager 사용
-    if (chatWs) {
-        return; // 이미 초기화된 경우
-    }
-    
-    // 토큰 가져오기
-    const token = localStorage.getItem('access_token');
-    
-    // ChatWebSocketManager 인스턴스 생성
-    chatWs = new ChatWebSocketManager({
-        onMessage: handleWebSocketMessage,
-        onOpen: () => {
-            console.log('WebSocket connected');
-            showToast('success', '서버에 연결되었습니다');
-        },
-        onClose: () => {
-            console.log('WebSocket disconnected');
-            showToast('info', '서버 연결이 종료되었습니다');
-        },
-        onError: (error) => {
-            console.error('WebSocket error:', error);
-            showToast('error', '서버 연결에 문제가 발생했습니다');
-        },
-        params: {
-            token: token
-        }
-    });
-    
-    // 연결 시작
-    chatWs.connect();
-}
-
-// WebSocket 메시지 수신 처리
-function handleWebSocketMessage(data, event) {
     try {
-        console.log('WebSocket 메시지 수신:', data);
+        // 새로운 ChatWebSocketManager 인스턴스 생성
+        chatWs = new ChatWebSocketManager('/chat');
         
-        switch (data.type) {
-            case 'assistant':
-                if (data.streaming) {
-                    updateStreamingMessage(data.content, data.model);
-                } else if (data.isFullResponse) {
-                    completeStreamingMessage();
-                }
-                break;
-                
-            case 'message_complete':
-                // 메시지 처리 완료 신호 처리
-                completeStreamingMessage();
-                // 세션 ID 저장 (있는 경우)
-                if (data.data && data.data.session_id) {
-                    currentSessionId = data.data.session_id;
-                }
-                break;
-                
-            case 'processing':
-                // 메시지 처리 중 신호 - 이미 UI에 반영되어 있으므로 추가 작업 불필요
-                break;
-                
-            case 'connection_established':
-                console.log('WebSocket 연결 성공:', data.data);
-                break;
-                
-            case 'error':
-                showToast('error', data.data?.message || '오류가 발생했습니다');
-                isProcessing = false;
-                enableMessageInput();
-                break;
-                
-            default:
-                console.warn('알 수 없는 메시지 유형:', data.type, data);
-        }
+        // 메시지 핸들러 등록
+        chatWs.registerHandler('chat_message', handleChatMessage);
+        chatWs.registerHandler('error', handleError);
+        
+        // 연결 상태 변화 핸들러 등록
+        chatWs.onConnectionChange((connected) => {
+            if (connected) {
+                console.log('채팅 서버에 연결되었습니다.');
+            } else {
+                console.log('채팅 서버와의 연결이 끊어졌습니다.');
+            }
+        });
+        
+        // 오류 핸들러 등록
+        chatWs.onError((error) => {
+            console.error('웹소켓 오류:', error);
+            showToast('error', '서버 연결 중 오류가 발생했습니다');
+        });
+        
+        // 웹소켓 연결
+        chatWs.connect()
+            .then(() => {
+                console.log('웹소켓 연결 성공');
+            })
+            .catch(error => {
+                console.error('웹소켓 연결 실패:', error);
+                showToast('error', '서버에 연결할 수 없습니다');
+            });
     } catch (error) {
-        console.error('WebSocket 메시지 처리 오류:', error);
+        console.error('웹소켓 초기화 오류:', error);
+        showToast('error', '웹소켓 초기화 중 오류가 발생했습니다');
     }
 }
 
-// WebSocket 메시지 전송 함수
-function sendWebSocketMessage(message) {
-    if (!chatWs) {
-        showToast('error', '서버에 연결되어 있지 않습니다');
-        isProcessing = false;
-        enableMessageInput();
-        return;
-    }
+// 채팅 메시지 처리 핸들러
+function handleChatMessage(data, event) {
+    console.log('채팅 메시지 수신:', data);
     
-    // ChatWebSocketManager를 사용하여 메시지 전송
-    chatWs.sendMessage({
-        message: message,
-        onSuccess: () => console.log('메시지 전송 성공'),
-        onError: (error) => {
-            console.error('메시지 전송 실패:', error);
-            showToast('error', '메시지 전송에 실패했습니다');
-            isProcessing = false;
+    // 메시지 타입에 따라 처리
+    if (data.type === 'assistant_message' || data.content) {
+        // 어시스턴트 메시지 처리
+        updateStreamingMessage(data.content, data.model || currentModel);
+        
+        // 스트리밍 종료 확인
+        if (data.done) {
+            completeStreamingMessage();
             enableMessageInput();
         }
-    });
+    }
+}
+
+// 오류 메시지 처리 핸들러
+function handleError(data, event) {
+    console.error('오류 메시지 수신:', data);
+    showToast('error', data.message || '서버에서 오류가 발생했습니다');
+    enableMessageInput();
+}
+
+// 웹소켓으로 메시지 전송
+function sendWebSocketMessage(message) {
+    if (!chatWs) {
+        console.error('웹소켓이 초기화되지 않았습니다.');
+        showToast('error', '서버에 연결되지 않았습니다');
+        return false;
+    }
+    
+    // 인증 상태 확인
+    if (!chatWs.isAuthenticated()) {
+        console.warn('인증되지 않은 웹소켓 연결');
+        
+        // 로컬 스토리지의 사용자 ID 확인
+        const userId = localStorage.getItem('user_id');
+        if (!userId) {
+            console.error('사용자 인증 정보가 없습니다');
+            showToast('error', '로그인이 필요합니다');
+            return false;
+        }
+        
+        // 재인증 시도
+        setTimeout(() => {
+            chatWs.sendInitMessage();
+        }, 100);
+    }
+    
+    // 메시지 전송
+    return chatWs.send(message);
 }
 
 // 메시지 전송 함수
@@ -909,3 +899,4 @@ function startNewChat() {
     isProcessing = false;
     enableMessageInput();
 }
+

@@ -1,16 +1,16 @@
 from fastapi import FastAPI, WebSocket, Request, UploadFile, File, Depends, HTTPException, status
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import HTMLResponse, FileResponse, StreamingResponse
+from fastapi.responses import HTMLResponse, FileResponse, StreamingResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
+from fastapi.security import OAuth2PasswordRequestForm
+from starlette.middleware.sessions import SessionMiddleware
 import uvicorn
 from datetime import timedelta, datetime
 from colorama import init
 from typing import List, Dict, Any
 import os
 from dotenv import load_dotenv
-import jwt
 import asyncio
 import json
 import argparse
@@ -39,7 +39,7 @@ uvicorn_logger = logging.getLogger("uvicorn")
 uvicorn_logger.setLevel(logging.DEBUG)
 
 from backend.utils.agent.ai import FileHandler
-from backend.login import LoginUtils, auth_handler, UserRole
+from backend.login import auth_handler, UserRole
 from chat import ChatManager, MessageHandler, AIModel, MessageRole, ChatMessage, ChatSession
 from backend.crawl import crawling_state, start_crawling, stop_crawling, get_results, get_crawling_status
 from backend.websocket_manager import WebSocketManager, ChatWebSocketEndpoint, CrawlWebSocketEndpoint, AgentWebSocketEndpoint
@@ -48,7 +48,7 @@ from backend.websocket_manager import WebSocketManager, ChatWebSocketEndpoint, C
 from sqlalchemy.orm import Session
 
 # dbcon.py에서 필요한 것들을 가져옵니다
-from dbcon import engine, SessionLocal, Base, get_db, test_connection
+from dbcon import engine, SessionLocal, Base, get_db, test_connection, AuthUtils
 from docpro import process_file, clean_text
 
 # .env 파일 로드
@@ -64,13 +64,25 @@ message_handler = MessageHandler(chat_manager)
 
 app = FastAPI()
 
-# CORS 설정
+# CORS 설정 - 세션 미들웨어보다 먼저 설정
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=["http://localhost:8000", "http://127.0.0.1:8000"],  # 명시적 허용 도메인
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+)
+
+# 세션 미들웨어 추가 - JWT 대체
+SECRET_KEY = os.getenv("JWT_SECRET_KEY", "default_secret_key")
+app.add_middleware(
+    SessionMiddleware,
+    secret_key=SECRET_KEY,
+    session_cookie="user_session",
+    max_age=24 * 3600,  # 24시간
+    same_site="lax",  # SameSite 설정
+    https_only=False,  # 개발 환경에서는 false로 설정
+    path="/",  # 모든 경로에서 쿠키 접근 가능
 )
 
 # 정적 파일 및 템플릿 설정
@@ -78,9 +90,12 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 templates = Jinja2Templates(directory="static")
 
 # 매니저 초기화
-ACCESS_TOKEN_EXPIRE_MINUTES = 30
 file_handler = FileHandler()
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="api/login")
+
+# 로그 관련 설정 강화
+app.logger = logger
+debug_level = logging.getLogger("fastapi").level
+logger.debug(f"FastAPI 로거 레벨: {debug_level}")
 
 # 웹소켓 관리자 초기화
 websocket_manager = WebSocketManager()
@@ -94,29 +109,99 @@ def parse_args():
     
     return parser.parse_args()
 
-# 현재 사용자 가져오기
-async def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
-    return await LoginUtils.verify_user(token, db)
+# 현재 사용자 정보 가져오기 - 세션 기반으로 변경
+async def get_current_user(request: Request, db: Session = Depends(get_db)):
+    user_id = request.session.get("user_id")
+    if not user_id:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Not authenticated",
+        )
+    
+    user = auth_handler.get_user_by_id(db, user_id)
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="User not found",
+        )
+    
+    return user
 
 # 권한 확인
 def require_role(allowed_roles: List[UserRole]):
     async def role_checker(user: dict = Depends(get_current_user)):
-        LoginUtils.verify_role(user, allowed_roles)
+        if user["role"] not in [role.value for role in allowed_roles]:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Permission denied",
+            )
         return user["role"]
     return role_checker
 
 # 라우트 정의
 @app.get("/", response_class=HTMLResponse)
 async def root(request: Request):
-    return templates.TemplateResponse("login.html", {"request": request})
+    # 로그인 페이지 접근 시 무한 리디렉션 확인
+    error = request.query_params.get("error")
+    redirected = request.query_params.get("redirected")
+    
+    # 이미 세션이 있는 사용자가 로그인 페이지에 접근하면 홈으로 리디렉션
+    user_id = request.session.get("user_id")
+    if user_id and not error and not redirected:
+        logger.debug(f"이미 로그인된 사용자({user_id})의 로그인 페이지 접근. 홈으로 리디렉션")
+        return RedirectResponse(url="/home")
+    
+    # 에러 메시지 설정
+    context = {"request": request}
+    if error:
+        if error == "redirect_loop":
+            context["error"] = "무한 리디렉션이 감지되었습니다. 다시 로그인해주세요."
+        elif error == "excessive_refresh":
+            context["error"] = "과도한 새로고침이 감지되었습니다. 다시 로그인해주세요."
+    
+    # 리디렉션 파라미터 처리
+    if redirected == "true":
+        context["error"] = "세션이 만료되었습니다. 다시 로그인해주세요."
+    
+    return templates.TemplateResponse("login.html", context)
 
 @app.get("/home", response_class=HTMLResponse)
 async def home(request: Request):
+    # 인증 여부 확인
+    user_id = request.session.get("user_id")
+    
+    # 디버깅을 위한 세션 정보 로깅
+    session_id = request.cookies.get("user_session")
+    logger.debug(f"홈 페이지 접근 - 세션 ID: {session_id}, 사용자 ID: {user_id}")
+    
+    # x-forwarded-for 또는 클라이언트 IP 확인
+    client_ip = request.headers.get("x-forwarded-for", request.client.host)
+    logger.debug(f"클라이언트 IP: {client_ip}")
+    
+    if not user_id:
+        logger.warning(f"미인증 사용자의 홈 페이지 접근 시도: {client_ip}")
+        
+        # 리디렉션하지 않고 로그인 페이지를 직접 반환
+        return templates.TemplateResponse(
+            "login.html", 
+            {
+                "request": request, 
+                "error": "로그인이 필요합니다.", 
+                "no_redirect": True
+            }
+        )
+    
+    # 정상 로그인된 사용자의 홈 페이지 렌더링
     return templates.TemplateResponse("home.html", {"request": request})
 
 # 크롤링 페이지 추가
 @app.get("/crawl", response_class=HTMLResponse)
 async def crawl_page(request: Request):
+    # 인증 여부 확인
+    user_id = request.session.get("user_id")
+    if not user_id:
+        return templates.TemplateResponse("login.html", {"request": request})
+    
     logger.debug("크롤링 페이지 요청 - 클라이언트: %s", request.client.host)
     try:
         response = templates.TemplateResponse("crawl.html", {"request": request})
@@ -128,21 +213,39 @@ async def crawl_page(request: Request):
         raise HTTPException(status_code=500, detail="페이지 렌더링 중 오류가 발생했습니다.")
 
 @app.post("/api/login")
-async def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
+async def login(request: Request, form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
+    logger.debug(f"로그인 시도: 사용자 ID = {form_data.username}")
+    
     user = auth_handler.authenticate_user(form_data.username, form_data.password, db)
     if not user:
+        logger.warning(f"로그인 실패: 사용자 ID = {form_data.username} (잘못된 인증 정보)")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect ID or password",
-            headers={"WWW-Authenticate": "Bearer"},
         )
     
-    expires_delta = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
-    return LoginUtils.create_user_token(user, expires_delta)
+    # 세션에 사용자 정보 저장
+    request.session["user_id"] = user["id"]
+    request.session["user_role"] = user["role"]
+    
+    logger.info(f"로그인 성공: 사용자 ID = {form_data.username}, 역할 = {user['role']}")
+    
+    # 클라이언트에 사용자 정보 반환
+    return {
+        "user_id": user["id"],
+        "role": user["role"],
+        "session_valid": True
+    }
+
+@app.post("/api/logout")
+async def logout(request: Request):
+    # 세션에서 사용자 정보 제거
+    request.session.clear()
+    return {"success": True}
 
 @app.get("/api/me")
-async def get_me(current_user: dict = Depends(get_current_user)):
-    return current_user
+async def get_me(user: dict = Depends(get_current_user)):
+    return user
 
 @app.get("/api/admin/users")
 async def get_all_users(
@@ -154,6 +257,24 @@ async def get_all_users(
 # WebSocket 엔드포인트
 @app.websocket("/chat")
 async def websocket_endpoint(websocket: WebSocket, token: str = None):
+    # 클라이언트 IP 로깅
+    client_ip = websocket.client.host
+    logger.debug(f"WebSocket 연결 시도: {client_ip}, 경로: /chat")
+    
+    # 쿠키 헤더 로깅
+    cookies_header = websocket.headers.get("cookie", "")
+    logger.debug(f"WebSocket 쿠키 헤더: {cookies_header[:100] if cookies_header else '없음'}")
+    
+    # 세션 쿠키 확인
+    user_session = None
+    if cookies_header:
+        for cookie in cookies_header.split(';'):
+            cookie = cookie.strip()
+            if cookie.startswith("user_session="):
+                user_session = cookie.split('=', 1)[1]
+                logger.debug(f"WebSocket 연결에서 세션 쿠키 발견: {user_session[:10]}...")
+                break
+    
     # 웹소켓 관리자의 채팅 엔드포인트에 처리 위임
     endpoint = websocket_manager.get_endpoint("/chat")
     await endpoint.handle_client(websocket, token)
@@ -504,7 +625,7 @@ async def startup_event():
     logger.debug("웹소켓 엔드포인트 등록")
     
     # 채팅 웹소켓 엔드포인트 등록
-    chat_endpoint = ChatWebSocketEndpoint(chat_manager, message_handler, LoginUtils, SessionLocal)
+    chat_endpoint = ChatWebSocketEndpoint(chat_manager, message_handler, AuthUtils, SessionLocal)
     websocket_manager.register_endpoint(chat_endpoint)
     
     # 크롤링 웹소켓 엔드포인트 등록

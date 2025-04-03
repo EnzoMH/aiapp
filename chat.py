@@ -10,10 +10,29 @@ from datetime import datetime
 import uuid
 
 # AI 모델 라이브러리 임포트
-from anthropic import AsyncAnthropic
-import google.generativeai as genai
-from llama_cpp import Llama
-from transformers import AutoTokenizer
+try:
+    from anthropic import AsyncAnthropic
+except ImportError:
+    AsyncAnthropic = None
+    print("Warning: anthropic 라이브러리를 찾을 수 없습니다. Claude 모델을 사용할 수 없습니다.")
+
+try:
+    import google.generativeai as genai
+except ImportError:
+    genai = None
+    print("Warning: google-generativeai 라이브러리를 찾을 수 없습니다. Gemini 모델을 사용할 수 없습니다.")
+
+try:
+    from llama_cpp import Llama
+except ImportError:
+    Llama = None
+    print("Warning: llama-cpp-python 라이브러리를 찾을 수 없습니다. 로컬 LLM 모델을 사용할 수 없습니다.")
+
+try:
+    from transformers import AutoTokenizer
+except ImportError:
+    AutoTokenizer = None
+    print("Warning: transformers 라이브러리를 찾을 수 없습니다. 토크나이저를 사용할 수 없습니다.")
 
 from dotenv import load_dotenv
 
@@ -190,24 +209,27 @@ class AIModelManager:
         """AI 모델 초기화"""
         try:
             # Claude 설정
-            self.anthropic = AsyncAnthropic(api_key=os.getenv('CLAUDE_API_KEY'))
+            if AsyncAnthropic:
+                self.anthropic = AsyncAnthropic(api_key=os.getenv('CLAUDE_API_KEY'))
             
             # Gemini 설정
-            genai.configure(api_key=os.getenv('GEMINI_API_KEY'))
-            self.gemini_config = {
-                'temperature': 0.9,
-                'top_p': 1,
-                'top_k': 1,
-                'max_output_tokens': 3000,
-            }
-            self.gemini_model = genai.GenerativeModel(
-                'gemini-1.5-flash',
-                generation_config=self.gemini_config
-            )
+            if genai:
+                genai.configure(api_key=os.getenv('GEMINI_API_KEY'))
+                self.gemini_config = {
+                    'temperature': 0.9,
+                    'top_p': 1,
+                    'top_k': 1,
+                    'max_output_tokens': 3000,
+                }
+                self.gemini_model = genai.GenerativeModel(
+                    'gemini-1.5-flash',
+                    generation_config=self.gemini_config
+                )
             
             # Meta(로컬) 모델 설정
             self.local_model = self._initialize_local_model()
-            self.tokenizer = AutoTokenizer.from_pretrained('Bllossom/llama-3.2-Korean-Bllossom-3B')
+            if AutoTokenizer:
+                self.tokenizer = AutoTokenizer.from_pretrained('Bllossom/llama-3.2-Korean-Bllossom-3B')
             
             logger.info("AI 모델 초기화 성공")
         except Exception as e:
@@ -225,22 +247,21 @@ class AIModelManager:
         
         try:
             logger.info("GPU 레이어 활성화 시도 중...")
-            model = Llama(
-                model_path=MODEL_PATH,
-                n_ctx=2048,
-                n_threads=8,
-                n_batch=1024,
-                n_gpu_layers=32,
-                f16_kv=True,
-                offload_kqv=True,
-                verbose=True  # 상세 로그 출력
-            )
-            logger.info("GPU 레이어 활성화 성공!")
-            return model
-        except Exception as e:
-            logger.warning(f"GPU 초기화 실패, CPU로 대체: {e}")
-            try:
-                logger.info("CPU 모드로 모델 초기화 시도 중...")
+            if Llama:
+                model = Llama(
+                    model_path=MODEL_PATH,
+                    n_ctx=2048,
+                    n_threads=8,
+                    n_batch=1024,
+                    n_gpu_layers=32,
+                    f16_kv=True,
+                    offload_kqv=True,
+                    verbose=True  # 상세 로그 출력
+                )
+                logger.info("GPU 레이어 활성화 성공!")
+                return model
+            else:
+                logger.warning("GPU 모드로 모델 초기화 실패, CPU로 대체 시도 중...")
                 model = Llama(
                     model_path=MODEL_PATH,
                     n_ctx=2048,
@@ -251,9 +272,9 @@ class AIModelManager:
                 )
                 logger.info("CPU 모드로 모델 초기화 성공!")
                 return model
-            except Exception as e:
-                logger.error(f"CPU 모델 초기화도 실패: {e}")
-                return None
+        except Exception as e:
+            logger.error(f"GPU 또는 CPU 모델 초기화 실패: {e}")
+            return None
 
     async def generate_response(self, messages: List[ChatMessage], model: AIModel, websocket: Optional[WebSocket] = None) -> str:
         """개선된 컨텍스트 기반 응답 생성"""

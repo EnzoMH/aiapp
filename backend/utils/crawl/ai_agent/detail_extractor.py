@@ -64,79 +64,123 @@ class DetailExtractor:
         self.websocket_handler = websocket_handler
         self.should_stop = False
     
-    async def process_details(self, items: Optional[List[BidItem]] = None) -> int:
+    async def extract_details(self, items: List[BidItem]) -> Dict[str, Any]:
         """
-        입찰 항목의 상세 정보 처리
+        입찰 항목 목록에서 상세 정보 추출
         
         Args:
-            items: 처리할 입찰 항목 목록 (None이면 result에서 가져옴)
+            items: 입찰 항목 목록
         
         Returns:
-            처리된 상세 항목 수
+            추출 결과
         """
-        if items is None:
-            items = self.result.items
-        
         if not items:
+            logger.warning("추출할 항목이 없습니다.")
+            return {"success": False, "message": "추출할 항목이 없습니다."}
+        
+        try:
+            logger.info(f"총 {len(items)}개 항목 중 최대 {self.max_details}개 상세 정보 추출 시작")
             self.result.add_agent_status(
-                message="처리할 입찰 항목이 없습니다.",
-                level=AgentStatusLevel.WARNING
-            )
-            return 0
-        
-        # 처리할 최대 항목 수 계산
-        items_to_process = items[:self.max_details]
-        
-        self.result.add_agent_status(
-            message=f"입찰 상세 정보 추출 시작 (총 {len(items_to_process)}개 항목)",
-            level=AgentStatusLevel.INFO
-        )
-        
-        # 웹소켓 상태 업데이트 (있는 경우)
-        if self.websocket_handler:
-            await self.websocket_handler(self.result)
-        
-        # 상세 정보 추출
-        processed_count = 0
-        
-        for index, item in enumerate(items_to_process):
-            if self.should_stop:
-                break
-            
-            # 상태 업데이트
-            self.result.add_agent_status(
-                message=f"입찰 상세 정보 추출 중 ({index+1}/{len(items_to_process)}): {item.title[:30]}...",
+                message=f"상세 정보 추출 시작 (총 {len(items)}개 항목 중 최대 {self.max_details}개)",
                 level=AgentStatusLevel.INFO
             )
             
-            # 웹소켓 상태 업데이트
-            if self.websocket_handler:
-                await self.websocket_handler(self.result)
+            # 최대 항목 수 제한
+            items_to_process = items[:self.max_details]
+            
+            # 각 항목마다 상세 정보 추출
+            success_count = 0
+            
+            for idx, item in enumerate(items_to_process):
+                # 중지 요청 확인
+                if self.should_stop:
+                    logger.info("사용자 요청으로 상세 정보 추출 중단")
+                    self.result.add_agent_status(
+                        message="사용자 요청으로 상세 정보 추출 중단됨",
+                        level=AgentStatusLevel.WARNING
+                    )
+                    break
+                
+                logger.info(f"[{idx+1}/{len(items_to_process)}] 항목 상세 정보 추출 중: {item.bid_id} - {item.title}")
+                self.result.add_agent_status(
+                    message=f"[{idx+1}/{len(items_to_process)}] 항목 처리 중: {item.title[:30]}...",
+                    level=AgentStatusLevel.INFO
+                )
+                
+                # URL이 있는 경우 직접 접속
+                if item.url:
+                    success = await self._extract_detail(item)
+                else:
+                    # URL이 없는 경우 목록에서 이동하여 추출 시도
+                    success = await self._safely_navigate_and_extract_detail(item, idx)
+                
+                if success:
+                    success_count += 1
+                
+                # 다음 항목 처리 전 지연
+                await asyncio.sleep(random.uniform(1.0, 2.0))
+            
+            logger.info(f"상세 정보 추출 완료: 총 {len(items_to_process)}개 중 {success_count}개 성공")
+            self.result.add_agent_status(
+                message=f"상세 정보 추출 완료: 총 {len(items_to_process)}개 중 {success_count}개 성공",
+                level=AgentStatusLevel.SUCCESS
+            )
+            
+            return {
+                "success": True, 
+                "processed": len(items_to_process), 
+                "succeeded": success_count
+            }
+            
+        except Exception as e:
+            logger.error(f"상세 정보 추출 중 오류: {str(e)}")
+            self.result.add_agent_status(
+                message=f"상세 정보 추출 오류: {str(e)}",
+                level=AgentStatusLevel.ERROR
+            )
+            return {"success": False, "message": str(e)}
+    
+    async def _safely_navigate_and_extract_detail(self, item: BidItem, row_index: int) -> bool:
+        """
+        목록에서 상세 페이지로 이동하여 정보 추출
+        
+        Args:
+            item: 입찰 항목
+            row_index: 행 인덱스
+            
+        Returns:
+            성공 여부
+        """
+        try:
+            logger.info(f"목록에서 상세 페이지로 이동 시도 (행: {row_index})")
+            
+            # G2BCrawler 참조 가져오기
+            from ..core.crawler_base import G2BCrawler
+            
+            # 상세 페이지로 이동
+            if isinstance(self.driver, webdriver.Chrome) and hasattr(self.driver, 'navigate_to_detail'):
+                # 이미 G2BCrawler의 인스턴스 메서드를 사용하는 경우
+                success = await self.driver.navigate_to_detail(row_index)
+            else:
+                # G2BCrawler의 메서드를 직접 사용하는 대체 로직
+                crawler = G2BCrawler()
+                crawler.driver = self.driver
+                crawler.wait = self.wait
+                success = await crawler.navigate_to_detail(row_index)
+            
+            if not success:
+                logger.warning(f"상세 페이지 이동 실패: {item.bid_id}")
+                return False
+            
+            # 페이지 로딩 대기
+            await asyncio.sleep(2)
             
             # 상세 정보 추출
-            success = await self._extract_detail(item)
+            return await self._extract_detail(item)
             
-            if success:
-                processed_count += 1
-            
-            # 약간의 대기 (차단 방지)
-            await asyncio.sleep(random.uniform(1.5, 3.0))
-        
-        # 완료 상태 업데이트
-        self.result.add_agent_status(
-            message=f"입찰 상세 정보 추출 완료 ({processed_count}/{len(items_to_process)}개 성공)",
-            level=AgentStatusLevel.SUCCESS if processed_count > 0 else AgentStatusLevel.WARNING
-        )
-        
-        # 웹소켓 상태 업데이트
-        if self.websocket_handler:
-            await self.websocket_handler(self.result)
-        
-        return processed_count
-    
-    async def stop(self):
-        """처리 중지"""
-        self.should_stop = True
+        except Exception as e:
+            logger.error(f"상세 페이지 이동 및 추출 중 오류: {str(e)}")
+            return False
     
     async def _extract_detail(self, item: BidItem) -> bool:
         """

@@ -13,13 +13,14 @@ import os
 from typing import List, Dict, Any, Optional, Union
 from datetime import datetime, date
 
-from backend.utils.crawl import G2BCrawler, crawler_manager
+# G2BCrawler를 G2BCrawlerWrapper로 변경
+from backend.utils.crawl.crawler import G2BCrawlerWrapper, SearchValidator
+from backend.utils.crawl import crawler_manager
 from backend.utils.crawl.models import (
     CrawlingRequest, 
     CrawlingResponse, 
     CrawlingStatus, 
     BidItem,
-    SearchValidator,
     ResultFileInfo
 )
 
@@ -292,8 +293,8 @@ async def crawl_process(keywords: List[str], headless: bool = True):
     logger.info(f"크롤링 프로세스 시작: {len(keywords)}개 키워드")
     
     try:
-        # G2B 크롤러 인스턴스 생성
-        crawler = G2BCrawler(headless=headless)
+        # G2B 크롤러 인스턴스 생성 (G2BCrawlerWrapper로 변경)
+        crawler = G2BCrawlerWrapper(headless=headless)
         crawling_state.current_crawler = crawler
         
         # 크롤러 초기화

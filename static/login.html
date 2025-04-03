@@ -6,6 +6,42 @@
     <title>Login</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="/static/css/style.css" rel="stylesheet">
+    <script>
+    // 페이지 로드 전에 무한 리프레시 감지 및 방지
+    (function() {
+        const now = Date.now();
+        const lastVisit = parseInt(sessionStorage.getItem('last_login_visit') || '0');
+        const timeDiff = now - lastVisit;
+        
+        // 방문 시간 기록
+        sessionStorage.setItem('last_login_visit', now.toString());
+        
+        // 너무 빠른 재방문 감지 (100ms 이내)
+        if (lastVisit > 0 && timeDiff < 100) {
+            console.error('빠른 페이지 리로드 감지:', timeDiff + 'ms');
+            // 방문 횟수 기록
+            const visitCount = parseInt(sessionStorage.getItem('login_visit_count') || '0') + 1;
+            sessionStorage.setItem('login_visit_count', visitCount.toString());
+            
+            // 과도한 반복 방지
+            if (visitCount > 5) {
+                console.error('무한 리디렉션 감지. 세션 데이터 초기화');
+                sessionStorage.clear();
+                localStorage.clear();
+                
+                // 무한 리프레시 방지를 위해 모든 리다이렉션과 자동 새로고침 중지
+                if (window.stop) {
+                    window.stop();
+                } else if (document.execCommand) {
+                    document.execCommand('Stop');
+                }
+            }
+        } else {
+            // 정상 방문 - 카운터 초기화
+            sessionStorage.setItem('login_visit_count', '0');
+        }
+    })();
+    </script>
 </head>
 <body class="bg-gray-100">
     <div class="min-h-screen flex items-center justify-center">
@@ -27,11 +63,83 @@
                     로그인
                 </button>
             </form>
-            <div id="errorMessage" class="mt-4 text-red-600 text-sm hidden"></div>
+            
+            <!-- 오류 메시지 영역 -->
+            <div id="errorContainer" class="mt-4">
+                <div id="errorMessage" class="text-red-600 text-sm hidden"></div>
+                
+                <!-- 서버에서 전달받은 오류 메시지 -->
+                {% if error %}
+                <div class="text-red-600 text-sm bg-red-50 p-2 rounded mt-2">
+                    {{ error }}
+                </div>
+                {% endif %}
+                
+                <!-- 세션 오류 메시지 -->
+                <div id="sessionError" class="mt-2 text-red-600 text-sm hidden bg-red-50 p-2 rounded">
+                    세션 처리 중 오류가 발생했습니다. 다시 로그인해주세요.
+                </div>
+            </div>
         </div>
     </div>
     
     <!-- 홈 모듈 대신 로그인 전용 스크립트 사용 -->
     <script src="/static/js/login.js"></script>
+    
+    <!-- 오류 파라미터 확인 스크립트 -->
+    <script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // URL 파라미터 확인
+        const urlParams = new URLSearchParams(window.location.search);
+        
+        // 리디렉션 루프 방지를 위한 플래그 확인
+        {% if no_redirect %}
+        console.log('리디렉션 루프 방지 모드');
+        // 리다이렉션을 중지하고 현재 페이지에 유지
+        // 브라우저 히스토리 조작
+        history.pushState(null, '', '/');
+        // 뒤로가기 이벤트 차단
+        window.addEventListener('popstate', function(e) {
+            history.pushState(null, '', '/');
+        });
+        {% endif %}
+        
+        // 리디렉션 오류 처리
+        if (urlParams.has('error')) {
+            const error = urlParams.get('error');
+            const errorMsg = document.getElementById('errorMessage');
+            const sessionError = document.getElementById('sessionError');
+            
+            if (error === 'redirect_loop') {
+                // 무한 리디렉션 오류
+                sessionError.textContent = '페이지가 너무 많이 새로고침되었습니다. 브라우저 캐시를 삭제하고 다시 시도해주세요.';
+                sessionError.classList.remove('hidden');
+            } else if (error === 'session_expired') {
+                // 세션 만료 오류
+                sessionError.textContent = '세션이 만료되었습니다. 다시 로그인해주세요.';
+                sessionError.classList.remove('hidden');
+            } else if (error === 'excessive_refresh') {
+                // 과도한 새로고침 오류
+                sessionError.textContent = '과도한 새로고침이 감지되었습니다. 잠시 후 다시 시도해주세요.';
+                sessionError.classList.remove('hidden');
+            } else if (urlParams.has('redirect')) {
+                // 일반 리디렉션
+                errorMsg.textContent = '로그인이 필요합니다.';
+                errorMsg.classList.remove('hidden');
+            }
+            
+            // 오류 파라미터 제거 (Clean URL)
+            const cleanUrl = window.location.pathname;
+            window.history.replaceState({}, document.title, cleanUrl);
+        }
+        
+        // redirected 파라미터 확인 (무한 리디렉션 방지용)
+        if (urlParams.has('redirected')) {
+            // 파라미터 제거하여 새로고침해도 계속 리디렉션되지 않도록 함
+            const cleanUrl = window.location.pathname;
+            window.history.replaceState({}, document.title, cleanUrl);
+        }
+    });
+    </script>
 </body>
 </html>

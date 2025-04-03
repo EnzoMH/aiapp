@@ -6,31 +6,6 @@ import logging
 from typing import Optional, Dict, Any
 from fastapi import UploadFile, HTTPException
 
-# 문서 처리 라이브러리
-from PyPDF2 import PdfReader
-from langchain_teddynote.document_loaders import HWPLoader
-import pandas as pd
-
-# 선택적 라이브러리 (설치된 경우에만 사용)
-try:
-    import fitz  # PyMuPDF
-    PYMUPDF_AVAILABLE = True
-except ImportError:
-    PYMUPDF_AVAILABLE = False
-
-try:
-    import docx
-    DOCX_AVAILABLE = True
-except ImportError:
-    DOCX_AVAILABLE = False
-    
-# Excel 처리 라이브러리 추가
-try:
-    import pandas as pd
-    PANDAS_AVAILABLE = True
-except ImportError:
-    PANDAS_AVAILABLE = False
-
 # 로깅 설정
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -38,6 +13,57 @@ if not logger.handlers:
     handler = logging.StreamHandler()
     handler.setFormatter(logging.Formatter('[%(asctime)s] %(levelname)s: %(message)s'))
     logger.addHandler(handler)
+
+# 기본 PDF 처리 라이브러리
+try:
+    from PyPDF2 import PdfReader
+    PYPDF2_AVAILABLE = True
+except ImportError:
+    PYPDF2_AVAILABLE = False
+    logger.warning("PyPDF2 라이브러리를 찾을 수 없습니다. PDF 처리가 제한됩니다.")
+
+# 문서 처리 라이브러리 - 조건부 임포트
+try:
+    from langchain_teddynote.document_loaders import HWPLoader
+    HWP_LOADER_AVAILABLE = True
+except ImportError:
+    logger.warning("langchain_teddynote 라이브러리를 찾을 수 없습니다. HWP 파일 처리가 제한됩니다.")
+    HWP_LOADER_AVAILABLE = False
+    
+    # 더미 클래스 정의
+    class DummyHWPLoader:
+        def __init__(self, *args, **kwargs):
+            pass
+            
+        def load(self, *args, **kwargs):
+            logger.warning("HWP 파일 로드 기능을 사용할 수 없습니다. langchain_teddynote 라이브러리를 설치하세요.")
+            return []
+    
+    # 더미 객체로 대체
+    HWPLoader = DummyHWPLoader
+
+# 선택적 라이브러리 (설치된 경우에만 사용)
+try:
+    import fitz  # PyMuPDF
+    PYMUPDF_AVAILABLE = True
+except ImportError:
+    PYMUPDF_AVAILABLE = False
+    logger.warning("PyMuPDF 라이브러리를 찾을 수 없습니다. 고급 PDF 처리가 제한됩니다.")
+
+try:
+    import docx
+    DOCX_AVAILABLE = True
+except ImportError:
+    DOCX_AVAILABLE = False
+    logger.warning("python-docx 라이브러리를 찾을 수 없습니다. DOCX 처리가 제한됩니다.")
+    
+# Excel 처리 라이브러리 추가
+try:
+    import pandas as pd
+    PANDAS_AVAILABLE = True
+except ImportError:
+    PANDAS_AVAILABLE = False
+    logger.warning("pandas 라이브러리를 찾을 수 없습니다. Excel 처리가 제한됩니다.")
 
 async def process_file(file: UploadFile) -> str:
     """

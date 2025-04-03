@@ -58,9 +58,14 @@ class User(Base):
     memories = relationship("Memory", back_populates="user", cascade="all, delete-orphan")
     
     def verify_password(self, plain_password):
-        """비밀번호 검증 (임시 해결책)"""
-        # 현재는 평문 비교 (보안상 좋지 않음)
-        return plain_password == self.password
+        """비밀번호 검증"""
+        # bcrypt 해싱 사용
+        try:
+            # 해시 된 비밀번호와 비교
+            return pwd_context.verify(plain_password, self.password)
+        except Exception:
+            # 오류가 발생하면 (이전 평문 비밀번호 지원)
+            return plain_password == self.password
     
     @staticmethod
     def get_password_hash(password):

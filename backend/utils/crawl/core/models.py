@@ -4,7 +4,7 @@
 이 모듈은 크롤링된 데이터를 구조화하기 위한 Pydantic 모델을 정의합니다.
 """
 
-from datetime import datetime
+from datetime import datetime, date
 from enum import Enum
 from typing import Dict, List, Optional, Any, Union
 from pydantic import BaseModel, Field, validator
@@ -140,6 +140,66 @@ class BidDetail(BaseModel):
     crawled_at: datetime = Field(default_factory=datetime.now)  # 크롤링 시간
 
 
+class G2BBidItem(BaseModel):
+    """나라장터 입찰 항목 상세 모델"""
+    business_type: str  # 업무구분 (물품/용역 등)
+    bid_number: str  # 입찰공고번호
+    title: str  # 공고명
+    announce_agency: str  # 공고기관
+    demand_agency: Optional[str] = None  # 수요기관 (공고기관과 다를 경우)
+    post_date: datetime  # 게시일시
+    bid_start_date: Optional[datetime] = None  # 입찰일시
+    bid_open_date: Optional[datetime] = None  # 개찰일시
+    bid_close_date: Optional[datetime] = None  # 마감일시
+    status: str  # 단계
+    url: Optional[str] = None  # 상세 URL
+    is_same_agency: bool = False  # 공고기관과 수요기관이 같은지 여부
+    crawled_at: datetime = Field(default_factory=datetime.now)  # 크롤링 시간
+    
+    @validator('is_same_agency', always=True)
+    def check_same_agency(cls, v, values):
+        """공고기관과 수요기관이 같은지 확인"""
+        announce = values.get('announce_agency')
+        demand = values.get('demand_agency')
+        if announce and demand:
+            return announce == demand
+        return False
+    
+    def is_valid_date(self) -> bool:
+        """날짜 기준으로 유효한 항목인지 검증
+        
+        조건:
+        1. 게시일시가 오늘 기준 3일 이상 지난 경우 무효
+        2. 마감일시가 오늘 기준 9일 미만인 경우 무효
+        """
+        today = datetime.now().date()
+        
+        # 게시일 확인 (3일 이상 지난 경우 제외)
+        if self.post_date:
+            post_date = self.post_date.date()
+            days_since_post = (today - post_date).days
+            if days_since_post > 3:
+                return False
+        
+        # 마감일 확인 (9일 미만인 경우 제외)
+        if self.bid_close_date:
+            close_date = self.bid_close_date.date()
+            days_until_close = (close_date - today).days
+            if days_until_close < 9:
+                return False
+                
+        return True
+    
+    def is_valid_business_type(self) -> bool:
+        """업무구분 기준으로 유효한 항목인지 검증 (물품/용역만 포함)"""
+        if not self.business_type:
+            return False
+            
+        # 물품 또는 용역인 경우만 유효
+        valid_types = ['물품', '용역']
+        return any(t in self.business_type for t in valid_types)
+
+
 class CrawlResult(BaseModel):
     """크롤링 결과 모델"""
     id: Optional[str] = None  # 결과 ID
@@ -242,4 +302,134 @@ class CrawlResult(BaseModel):
         base_dict["details"] = {bid_id: detail.dict() for bid_id, detail in self.details.items()}
         base_dict["errors"] = self.errors
         base_dict["agent_status"] = [status.dict() for status in self.agent_status]
-        return base_dict 
+        return base_dict
+
+
+class BidAttachment(BaseModel):
+    """입찰 첨부파일 모델"""
+    file_name: str  # 파일명
+    file_url: Optional[str] = None  # 파일 URL
+    file_size: Optional[str] = None  # 파일 크기
+    upload_date: Optional[datetime] = None  # 업로드 일자
+    file_type: Optional[str] = None  # 파일 유형
+    content: Optional[str] = None  # 추출된 파일 내용
+    downloaded: bool = False  # 다운로드 여부
+    processed: bool = False  # 처리 여부
+
+
+class BidContact(BaseModel):
+    """입찰 담당자 정보 모델"""
+    name: Optional[str] = None  # 담당자 이름
+    department: Optional[str] = None  # 부서
+    position: Optional[str] = None  # 직위
+    phone: Optional[str] = None  # 전화번호
+    email: Optional[str] = None  # 이메일
+    fax: Optional[str] = None  # 팩스
+    address: Optional[str] = None  # 주소
+    note: Optional[str] = None  # 비고
+
+
+class BidGeneralInfo(BaseModel):
+    """공고 일반 정보 모델"""
+    bid_method: Optional[str] = None  # 입찰방식
+    contract_method: Optional[str] = None  # 계약방식
+    industry_type: Optional[str] = None  # 업종구분
+    bid_type: Optional[str] = None  # 낙찰자결정방법
+    bid_gov_no: Optional[str] = None  # 공고번호
+    announcement_type: Optional[str] = None  # 공고구분
+    bid_limit: Optional[str] = None  # 참가제한여부
+    mixed_contract: Optional[str] = None  # 혼합입찰여부
+    joint_contract: Optional[str] = None  # 공동도급여부
+    site_visit: Optional[str] = None  # 현장설명여부
+    pre_price_evaluation: Optional[str] = None  # 사전가격공개여부
+    price_evaluation: Optional[str] = None  # 가격평가방식
+
+
+class BidQualification(BaseModel):
+    """입찰자격 정보 모델"""
+    business_license: Optional[str] = None  # 사업자등록증
+    business_conditions: Optional[str] = None  # 업종제한사항/입찰참가자격
+    license_requirements: Optional[List[str]] = None  # 면허/자격 제한사항
+    supply_performance: Optional[str] = None  # 공급실적
+    technical_capability: Optional[str] = None  # 기술능력
+    joint_execution: Optional[str] = None  # 공동수급체 구성/이행방식
+    other_qualifications: Optional[str] = None  # 기타 자격조건
+
+
+class BidRestriction(BaseModel):
+    """투찰제한 정보 모델"""
+    industry_restriction: Optional[str] = None  # 업종제한사항(가장중요)
+    region_restriction: Optional[str] = None  # 지역제한
+    small_business_restriction: Optional[str] = None  # 중소기업 참여제한
+    group_restriction: Optional[str] = None  # 협업/컨소시엄 제한
+    other_restrictions: Optional[str] = None  # 기타 제한사항
+
+
+class BidProgressInfo(BaseModel):
+    """입찰진행정보 모델"""
+    bid_start_date: Optional[datetime] = None  # 입찰시작일시
+    bid_end_date: Optional[datetime] = None  # 입찰마감일시
+    bid_open_date: Optional[datetime] = None  # 개찰일시
+    contract_period_start: Optional[datetime] = None  # 계약기간 시작일
+    contract_period_end: Optional[datetime] = None  # 계약기간 종료일
+    delivery_date: Optional[datetime] = None  # 납품기한
+    site_visit_date: Optional[datetime] = None  # 현장설명일시
+    site_visit_place: Optional[str] = None  # 현장설명장소
+    bid_deposit: Optional[str] = None  # 입찰보증금
+    performance_deposit: Optional[str] = None  # 계약이행보증금
+    warranty_deposit: Optional[str] = None  # 하자보수보증금
+    bid_place: Optional[str] = None  # 입찰장소
+
+
+class BidPriceInfo(BaseModel):
+    """가격 부문 정보 모델"""
+    estimated_price: Optional[str] = None  # 추정가격
+    base_price: Optional[str] = None  # 기초금액
+    announced_price: Optional[str] = None  # 예정가격
+    bid_unit: Optional[str] = None  # 입찰단위
+    price_adjustment: Optional[str] = None  # 물가변동 조정방법
+    standard_market_price: Optional[str] = None  # 시장단가
+    bid_unit_price: Optional[str] = None  # 단가입찰여부
+    low_price_limit: Optional[str] = None  # 낮은투찰 제한
+    payment_method: Optional[str] = None  # 대가지급방법
+    payment_timing: Optional[str] = None  # 지급시기
+
+
+class BidDetailInfo(BaseModel):
+    """입찰 상세 정보 통합 모델"""
+    bid_number: str  # 입찰번호
+    title: str  # 공고 제목
+    url: Optional[str] = None  # 공고 URL
+    
+    # 섹션별 정보
+    general_info: Optional[BidGeneralInfo] = None  # 공고 일반
+    qualification: Optional[BidQualification] = None  # 입찰자격
+    restriction: Optional[BidRestriction] = None  # 투찰제한
+    progress_info: Optional[BidProgressInfo] = None  # 입찰진행정보
+    price_info: Optional[BidPriceInfo] = None  # 가격 부문
+    agency_contact: Optional[BidContact] = None  # 기관담당자
+    demand_agency_contact: Optional[BidContact] = None  # 수요기관 담당자
+    
+    # 첨부파일 정보
+    attachments: List[BidAttachment] = Field(default_factory=list)  # 첨부파일 목록
+    
+    # 추가 정보
+    raw_html: Optional[str] = None  # 원본 HTML
+    processed_at: datetime = Field(default_factory=datetime.now)  # 처리 시간
+    
+    def to_dict(self) -> Dict[str, Any]:
+        """딕셔너리로 변환"""
+        return {
+            "bid_number": self.bid_number,
+            "title": self.title,
+            "url": self.url,
+            "general_info": self.general_info.dict() if self.general_info else None,
+            "qualification": self.qualification.dict() if self.qualification else None,
+            "restriction": self.restriction.dict() if self.restriction else None,
+            "progress_info": self.progress_info.dict() if self.progress_info else None,
+            "price_info": self.price_info.dict() if self.price_info else None,
+            "agency_contact": self.agency_contact.dict() if self.agency_contact else None,
+            "demand_agency_contact": self.demand_agency_contact.dict() if self.demand_agency_contact else None,
+            "attachments": [attachment.dict() for attachment in self.attachments],
+            "processed_at": self.processed_at.isoformat()
+        } 
