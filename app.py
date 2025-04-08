@@ -22,25 +22,24 @@ import sys
 
 # 로깅 설정 강화
 logging.basicConfig(
-    level=logging.DEBUG,  # 기본 레벨은 DEBUG로 설정
+    level=logging.INFO,  # 기본 레벨을 INFO로 변경
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     handlers=[
         logging.StreamHandler(),
-        logging.FileHandler("server.log", mode="a", encoding="utf-8")
     ]
 )
 logger = logging.getLogger("app")  # 애플리케이션 전용 로거 생성
-logger.setLevel(logging.DEBUG)  # 앱 로거 레벨 설정
+logger.setLevel(logging.INFO)  # 앱 로거 레벨을 INFO로 변경
 
 # 추가 로거 설정
 fastapi_logger = logging.getLogger("fastapi")
-fastapi_logger.setLevel(logging.DEBUG)
+fastapi_logger.setLevel(logging.INFO)
 uvicorn_logger = logging.getLogger("uvicorn")
-uvicorn_logger.setLevel(logging.DEBUG)
+uvicorn_logger.setLevel(logging.INFO)
 
 from backend.utils.agent.ai import FileHandler
 from backend.login import LoginUtils, auth_handler, UserRole
-from chat import ChatManager, MessageHandler, AIModel, MessageRole, ChatMessage, ChatSession
+from backend.chat import ChatManager, MessageHandler, AIModel, MessageRole, ChatMessage, ChatSession
 from backend.crawl import crawling_state, start_crawling, stop_crawling, get_results, get_crawling_status
 from backend.websocket_manager import WebSocketManager, ChatWebSocketEndpoint, CrawlWebSocketEndpoint, AgentWebSocketEndpoint
 
@@ -48,8 +47,8 @@ from backend.websocket_manager import WebSocketManager, ChatWebSocketEndpoint, C
 from sqlalchemy.orm import Session
 
 # dbcon.py에서 필요한 것들을 가져옵니다
-from dbcon import engine, SessionLocal, Base, get_db, test_connection
-from docpro import process_file, clean_text
+from backend.dbcon import engine, SessionLocal, Base, get_db, test_connection
+from backend.docpro import process_file, clean_text
 
 # .env 파일 로드
 load_dotenv()
@@ -483,15 +482,15 @@ async def startup_event():
         logger.error("데이터베이스 연결 테스트 실패: %s", str(e))
         logger.error("상세 오류: %s", traceback.format_exc())
     
-    # 로깅 레벨 설정 - 항상 DEBUG로 설정
-    logger.debug("로깅 레벨 설정")
-    logging.getLogger().setLevel(logging.DEBUG)
+    # 로깅 레벨 설정 - INFO로 변경
+    logger.info("로깅 레벨 설정")
+    logging.getLogger().setLevel(logging.INFO)
     
     # 크롤링 관련 로거 설정
-    logger.debug("크롤링 로거 설정")
+    logger.info("크롤링 로거 설정")
     for logger_name in ['backend.crawl', 'backend.utils.crawl.crawler', 'backend.utils.crawl.crawler_manager']:
         log = logging.getLogger(logger_name)
-        log.setLevel(logging.DEBUG)
+        log.setLevel(logging.INFO)
         
         # 기존 핸들러 설정 유지하면서 추가 포맷팅
         for handler in log.handlers:
@@ -553,7 +552,7 @@ if __name__ == "__main__":
             host=host,
             port=port,
             reload=True,
-            log_level="debug" if not args.verbose else "trace",
+            log_level="info",
             use_colors=True
         )
     except Exception as e:

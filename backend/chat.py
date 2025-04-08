@@ -27,12 +27,13 @@ import uuid
 
 from pydantic import BaseModel, Field
 
-from dbcon import SessionLocal, Session, Message as DBMessage, Session as DBSession
+# dbcon 모듈 경로 수정
+from backend.dbcon import SessionLocal, Session, Message as DBMessage, Session as DBSession
 
 
 load_dotenv()
 
-# 로깅 설정
+# 로깅 설정 - 이미 INFO로 설정되어 있음
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 

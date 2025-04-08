@@ -7,6 +7,7 @@ import uuid
 from datetime import datetime
 import enum
 from passlib.context import CryptContext
+import logging
 
 # .env 파일 로드
 load_dotenv()
@@ -25,7 +26,7 @@ if not PSQL_URL:
 # Engine 생성
 engine = create_engine(
     PSQL_URL,
-    echo=True,  # SQL 쿼리 로깅 활성화
+    echo=False,  # SQL 쿼리 로깅 비활성화
 )
 
 # SessionLocal 클래스 생성
@@ -127,25 +128,27 @@ def get_db():
 
 # 데이터베이스 연결 테스트
 def test_connection():
+    logger = logging.getLogger(__name__)
+    
     try:
         with engine.connect() as connection:
             # text() 함수를 사용하여 SQL 문자열을 실행 가능한 객체로 변환
             result = connection.execute(text("SELECT 1"))
-            print("데이터베이스 연결 성공!")
+            logger.info("데이터베이스 연결 성공!")
             
             # 테이블 확인
             result = connection.execute(text("SELECT table_name FROM information_schema.tables WHERE table_schema='public'"))
             tables = [row[0] for row in result]
-            print(f"데이터베이스 테이블 목록: {', '.join(tables)}")
+            logger.info(f"데이터베이스 테이블 목록: {', '.join(tables)}")
             
             # 사용자 데이터 확인
             result = connection.execute(text("SELECT user_id, role FROM users"))
             users = [f"{row[0]} ({row[1]})" for row in result]
-            print(f"등록된 사용자: {', '.join(users)}")
+            logger.info(f"등록된 사용자: {', '.join(users)}")
             
             return True
     except Exception as e:
-        print(f"데이터베이스 연결 실패: {str(e)}")
+        logger.error(f"데이터베이스 연결 실패: {str(e)}")
         return False
 
 # 사용자 인증 관련 유틸리티 함수

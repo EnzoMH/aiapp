@@ -39,7 +39,6 @@ logging.basicConfig(
     format='%(asctime)s - %(levelname)s - %(message)s',
     handlers=[
         logging.StreamHandler(),
-        logging.FileHandler("crawler.log", mode="a", encoding="utf-8")
     ]
 )
 logger = logging.getLogger(__name__)
@@ -176,6 +175,10 @@ class G2BCrawler:
         except Exception as e:
             logger.error(f"크롤러 초기화 실패: {str(e)}")
             return False
+    
+    async def init(self):
+        """크롤러 초기화 - initialize() 메서드 호출"""
+        return await self.initialize()
     
     async def _setup_driver(self):
         """웹드라이버 설정"""
@@ -492,134 +495,136 @@ class G2BCrawler:
             logger.error(f"검색 조건 설정 실패: {str(e)}")
             return False
     
-    async def search_keyword(self, keyword: str) -> List[Dict]:
-        """키워드로 검색 수행"""
-        results = []
+    async def search_keyword(self, keyword: str) -> List[dict]:
+        """
+        키워드 검색 수행 및 결과 추출
+        
+        Args:
+            keyword (str): 검색할 키워드
+            
+        Returns:
+            List[dict]: 추출된 데이터 목록 (각 항목은 기본 정보와 상세 정보 포함)
+        """
         try:
-            logger.info(f"'{keyword}' 키워드 검색 시작")
+            logger.info(f"키워드 '{keyword}' 검색 수행")
             
-            # 페이지 안정화를 위한 대기
-            logger.debug("검색 전 페이지 안정화를 위한 대기")
-            await asyncio.sleep(2)
-            
-            # 공고명 검색 필드 찾기 및 입력
-            try:
-                logger.debug("공고명 검색 필드 찾기 시도")
-                bid_name_input = self.driver.find_element(By.ID, "mf_wfm_container_tacBidPbancLst_contents_tab2_body_bidPbancNm")
-                bid_name_input.clear()
-                bid_name_input.send_keys(keyword)
-                logger.info(f"공고명 검색 필드에 '{keyword}' 입력 완료")
-                
-                # 포커스 변경을 위해 탭 키 입력 (선택적)
-                bid_name_input.send_keys(Keys.TAB)
-                logger.debug("공고명 검색 필드에서 탭 키 입력 완료")
-            except Exception as e:
-                logger.warning(f"공고명 검색 필드 입력 실패 (계속 진행): {str(e)}")
-                
-                # 대체 방법으로 키워드 검색어 입력 필드 사용
-                try:
-                    logger.debug("키워드 검색어 입력 필드 찾기 시도")
-                    search_input = self.driver.find_element(By.ID, "mf_wfm_container_tacBidPbancLst_contents_tab2_body_txtNmInptKwd_inputExt")
-                    search_input.clear()
-                    search_input.send_keys(keyword)
-                    logger.debug(f"키워드 검색어 필드에 '{keyword}' 입력 완료")
-                except Exception as sub_e:
-                    logger.error(f"모든 검색 필드 입력 실패: {str(sub_e)}")
-                    return []
-            
-            # UI 업데이트를 위한 짧은 대기
+            # 검색어 입력 필드
+            search_input = await self.page.wait_for_selector('#bidNm')
+            await search_input.fill('')  # 기존 입력값 초기화
+            await search_input.type(keyword)
             await asyncio.sleep(1)
             
-            # 검색 버튼 찾기
-            logger.debug("검색 버튼 찾기 시도")
-            search_button = WebDriverWait(self.driver, 10).until(
-                EC.element_to_be_clickable((By.ID, "mf_wfm_container_tacBidPbancLst_contents_tab2_body_btnS0004"))
-            )
-            
             # 검색 버튼 클릭
-            logger.debug("검색 버튼 클릭 시도")
-            search_button.click()
-            logger.info("검색 버튼 클릭 완료")
+            search_button = await self.page.wait_for_selector('button:has-text("검색")')
+            await search_button.click()
+            await asyncio.sleep(2)
             
-            # 결과 로딩 대기 (시간 증가)
-            logger.debug("검색 결과 로딩 대기 중...")
-            await asyncio.sleep(5)  # 3초에서 5초로 증가
-            
-            # 결과 없음 확인
-            if await self._check_no_results():
-                logger.info(f"'{keyword}' 키워드에 대한 검색 결과가 없습니다.")
-                return []
-                
             # 테이블 존재 확인
-            if not await self._check_table_exists():
-                logger.warning(f"'{keyword}' 키워드 검색 결과 테이블을 찾을 수 없습니다.")
-                if await self.recover_page_state(keyword):
-                    logger.info("페이지 복구 성공, 다시 검색 결과 확인")
-                    if not await self._check_table_exists():
-                        return []
+            table_exists = await self._check_table_exists()
+            if not table_exists:
+                # 검색 결과가 없는지 확인
+                no_results = await self._check_no_results()
+                if no_results:
+                    logger.warning(f"키워드 '{keyword}'에 대한 검색 결과가 없습니다.")
                 else:
-                    return []
+                    logger.error(f"키워드 '{keyword}' 검색 중 테이블을 찾을 수 없습니다.")
+                return []
             
-            # 검색 결과 행 수 확인
+            # 총 행 수 확인
             total_rows = await self._get_total_rows()
             if total_rows == 0:
-                logger.info(f"'{keyword}' 키워드에 대한 검색 결과가 없습니다.")
+                logger.warning(f"키워드 '{keyword}'에 대한 검색 결과가 없습니다.")
                 return []
+                
+            logger.info(f"키워드 '{keyword}' 검색 결과: {total_rows}개 항목")
             
-            logger.info(f"총 {total_rows}개의 검색 결과 발견")
+            # 결과 데이터 저장 리스트
+            result_data = []
             
-            # 각 행의 데이터 추출 (최대 20개로 제한)
-            max_rows = min(total_rows, 20)
-            for row_num in range(max_rows):
+            # 현재 페이지의 모든 행 처리
+            rows = await self.page.query_selector_all('#resultForm > div > table > tbody > tr')
+            
+            for row_index, row in enumerate(rows):
                 try:
-                    # 기본 행 데이터 추출
-                    basic_data = await self._extract_row_data(row_num)
-                    if not basic_data:
+                    # 1. 먼저 행에서 직접 기본 데이터 추출
+                    basic_info = await self._extract_row_data(row)
+                    if not basic_info:
+                        logger.warning(f"행 {row_index+1}: 기본 데이터 추출 실패")
                         continue
                         
-                    # 데이터 구조화
-                    bid_info = {
-                        'search_keyword': keyword,
-                        'basic_info': basic_data,
-                        'detail_info': {},
-                        'collected_at': datetime.now().isoformat()
+                    # 기본 데이터 로깅
+                    logger.info(f"행 {row_index+1} 기본 데이터 추출: {basic_info.get('title', 'N/A')} ({basic_info.get('bid_number', 'N/A')})")
+                    
+                    # 항목 데이터 사전 초기화
+                    item_data = {
+                        'basic_info': basic_info,
+                        'detail_info': {}
                     }
                     
-                    # 상세 정보 추출 (상세 정보 페이지로 이동하여 추출)
-                    try:
-                        detail_data = await self._safely_navigate_and_extract_detail(row_num)
-                        if detail_data:
-                            bid_info['detail_info'] = detail_data
-                    except Exception as e:
-                        logger.error(f"{row_num}번 행의 상세 정보 추출 실패: {str(e)}")
+                    # 2. 상세 페이지 링크 요소 가져오기 (별도로 클릭하기 위함)
+                    title_link = await row.query_selector('td:nth-child(4) > div > a')
                     
-                    # 결과 검증
-                    if self.validator.validate_required_fields(bid_info):
-                        results.append(bid_info)
-                        logger.info(f"행 {row_num + 1}/{max_rows} 처리 완료: {basic_data.get('title', '제목 없음')}")
+                    if title_link:
+                        # 3. 상세 페이지로 이동하여 추가 정보 추출
+                        try:
+                            # 링크 클릭 이벤트 실행
+                            await title_link.click()
+                            await asyncio.sleep(2)
+                            
+                            # 상세 페이지에서 정보 추출
+                            detail_info = await self._extract_detail_info()
+                            
+                            # 상세 정보 추가
+                            if detail_info:
+                                item_data['detail_info'] = detail_info
+                                logger.info(f"행 {row_index+1} 상세 정보 추출 성공")
+                            else:
+                                logger.warning(f"행 {row_index+1} 상세 정보 추출 실패")
+                            
+                            # 목록으로 돌아가기
+                            list_back_button = await self.page.wait_for_selector('a:has-text("목록")', timeout=5000)
+                            if list_back_button:
+                                await list_back_button.click()
+                                await asyncio.sleep(1)
+                            else:
+                                # 브라우저 뒤로가기
+                                await self.page.go_back()
+                                await asyncio.sleep(1)
+                                
+                        except Exception as e:
+                            logger.error(f"행 {row_index+1} 상세 정보 추출 중 오류: {str(e)}")
+                            # 페이지 복구 시도
+                            try:
+                                await self.page.go_back()
+                                await asyncio.sleep(2)
+                            except:
+                                logger.error("페이지 복구 실패, 검색 페이지로 재이동 시도")
+                                await self.navigate_to_bid_list()
+                                await self.setup_search_conditions()
+                                
+                                # 검색어 다시 입력
+                                search_input = await self.page.wait_for_selector('#bidNm')
+                                await search_input.fill('')
+                                await search_input.type(keyword)
+                                
+                                # 검색 버튼 다시 클릭
+                                search_button = await self.page.wait_for_selector('button:has-text("검색")')
+                                await search_button.click()
+                                await asyncio.sleep(2)
+                    else:
+                        logger.warning(f"행 {row_index+1} 제목 링크를 찾을 수 없음")
+                    
+                    # 수집된 데이터 추가
+                    result_data.append(item_data)
                     
                 except Exception as e:
-                    logger.error(f"{row_num}번 행 처리 중 오류: {str(e)}")
+                    logger.error(f"행 {row_index+1} 처리 중 오류: {str(e)}")
                     continue
             
-            # 결과에 키워드 정보 추가 및 중복 제거
-            if results:
-                self.all_results.extend(results)
-                self.processed_keywords.add(keyword)
-                
-                # 주기적 저장 확인
-                await self._check_and_save_results()
+            return result_data
             
-            logger.info(f"'{keyword}' 키워드 검색 완료: {len(results)}건 수집")
-            return results
         except Exception as e:
-            logger.error(f"'{keyword}' 키워드 검색 실패: {str(e)}")
-            # 스택 트레이스 로깅
-            logger.error(f"스택 트레이스: {traceback.format_exc()}")
-            
-            # 페이지 복구 시도
-            await self.recover_page_state(None)
-            
+            logger.error(f"키워드 '{keyword}' 검색 중 오류: {str(e)}")
             return []
     
     async def crawl_keywords(self, keywords: List[str]) -> Dict:
@@ -1256,77 +1261,84 @@ class G2BCrawler:
             logger.error(f"전체 결과 저장 실패: {str(e)}")
             return None
 
-    async def crawl_keyword(self, keyword: str) -> List[BidItem]:
+    async def search_bids(self, keyword: str) -> List[BidItem]:
         """
-        단일 키워드 크롤링 수행
+        키워드로 입찰 공고 검색
         
         Args:
             keyword (str): 검색할 키워드
             
         Returns:
-            List[BidItem]: 크롤링 결과 항목 목록
+            List[BidItem]: 검색된 입찰 항목 목록
         """
+        logger.info(f"키워드 '{keyword}' 검색 시작")
+        search_results = []
+        
         try:
-            logger.info(f"키워드 '{keyword}' 크롤링 시작")
+            # 초기 페이지 이동
+            await self.navigate_to_main()
+            await asyncio.sleep(2)
             
-            # 메인 페이지 접속
-            if not await self.navigate_to_main():
-                logger.error(f"키워드 '{keyword}' 크롤링 실패: 메인 페이지 접속 실패")
-                return []
-            
-            # 입찰공고목록 페이지로 이동
-            if not await self.navigate_to_bid_list():
-                logger.error(f"키워드 '{keyword}' 크롤링 실패: 입찰공고목록 페이지 접속 실패")
-                return []
+            # 입찰공고 목록 페이지로 이동
+            await self.navigate_to_bid_list()
+            await asyncio.sleep(2)
             
             # 검색 조건 설정
-            if not await self.setup_search_conditions():
-                logger.warning("검색 조건 설정 중 오류 발생 (진행 계속)")
+            await self.setup_search_conditions()
+            await asyncio.sleep(1)
             
-            # 키워드 검색 수행
-            result_data = await self.search_keyword(keyword)
+            # 키워드 검색 및 결과 추출
+            search_data = await self.search_keyword(keyword)
+            logger.info(f"키워드 '{keyword}' 검색 결과: {len(search_data)}건")
             
-            # BidItem 객체로 변환
-            items = []
-            for data in result_data:
+            # 결과가 없는 경우
+            if not search_data:
+                logger.warning(f"키워드 '{keyword}'에 대한 검색 결과가 없습니다.")
+                return []
+            
+            # 검색 결과를 BidItem으로 변환
+            for item_data in search_data:
                 try:
-                    # 기본 정보와 상세 정보 추출
-                    basic_info = data.get('basic_info', {})
-                    detail_info = data.get('detail_info', {})
-                    
-                    # 필수 필드 확인
-                    if not basic_info.get('title'):
-                        logger.warning(f"제목 없는 항목 제외: {basic_info}")
+                    # 기본 정보 확인
+                    basic_info = item_data.get('basic_info', {})
+                    if not basic_info or not basic_info.get('title'):
+                        logger.warning(f"유효하지 않은 항목 데이터 스킵: {basic_info}")
                         continue
                     
-                    # BidItem 객체 생성
-                    item = BidItem(
-                        bid_number=basic_info.get('bid_number'),
-                        bid_name=basic_info.get('title'),
-                        org_name=basic_info.get('organization'),
-                        deadline=basic_info.get('deadline'),
-                        status=basic_info.get('status'),
-                        url=basic_info.get('url'),
-                        bid_method=detail_info.get('bid_method'),
-                        contract_type=detail_info.get('contract_type'),
-                        price_evaluation=detail_info.get('price_evaluation'),
-                        location=detail_info.get('location'),
+                    # BidItem 생성
+                    bid_item = BidItem(
                         search_keyword=keyword,
+                        bid_number=basic_info.get('bid_number', ''),
+                        bid_name=basic_info.get('title', ''),
+                        org_name=basic_info.get('announce_agency', ''),
+                        deadline=basic_info.get('post_date', ''),
+                        status=basic_info.get('progress_stage', ''),
                         collected_at=datetime.now()
                     )
                     
-                    items.append(item)
+                    # 상세 정보가 있는 경우 추가 필드 설정
+                    detail_info = item_data.get('detail_info', {})
+                    if detail_info:
+                        # 상세 정보에서 추가 필드 설정
+                        if 'general_notice' in detail_info:
+                            bid_item.contract_type = detail_info.get('general_notice', '')[:100]  # 앞부분만 사용
+                        
+                        # 파일 정보가 있는 경우 처리
+                        if 'bid_notice_files' in detail_info:
+                            bid_item.additional_info = {"files": detail_info.get('bid_notice_files', [])}
+                    
+                    search_results.append(bid_item)
+                    logger.info(f"입찰 항목 변환 성공: {bid_item.bid_name}")
                     
                 except Exception as e:
-                    logger.error(f"BidItem 변환 중 오류: {str(e)}")
+                    logger.error(f"입찰 항목 변환 중 오류: {str(e)}")
                     continue
             
-            logger.info(f"키워드 '{keyword}' 크롤링 완료: {len(items)}개 항목")
-            return items
+            logger.info(f"키워드 '{keyword}' 최종 결과: {len(search_results)}건")
+            return search_results
             
         except Exception as e:
-            logger.error(f"키워드 '{keyword}' 크롤링 중 오류: {str(e)}")
-            logger.debug(traceback.format_exc())
+            logger.error(f"키워드 '{keyword}' 검색 중 오류: {str(e)}")
             return []
 
     async def _click_element_safely(self, by, selector, timeout=10, attempts=3):

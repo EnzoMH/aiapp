@@ -14,6 +14,7 @@ from typing import Dict, Any, List, Optional, Callable, Awaitable
 
 # 로깅 설정
 logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
 
 class WebSocketEndpoint:
     """웹소켓 엔드포인트 베이스 클래스"""

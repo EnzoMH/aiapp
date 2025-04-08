@@ -7,7 +7,8 @@ import os
 from dotenv import load_dotenv
 from typing import Optional, Dict, List
 
-from dbcon import get_db, AuthUtils, User, UserRole
+# dbcon 모듈 import 경로 수정
+from backend.dbcon import get_db, AuthUtils, User, UserRole
 
 # .env 파일 로드
 load_dotenv()
@@ -34,27 +35,20 @@ class LoginUtils:
         )
         
         try:
-            # 디버깅 로그 추가
-            print(f"검증 중인 토큰: {token[:10]}...")
-            
             # 토큰 디코딩
             payload = jwt.decode(token, JWT_SECRET_KEY, algorithms=[ALGORITHM])
-            print(f"디코딩된 페이로드: {payload}")
             
             user_id: str = payload.get("sub")
             if user_id is None:
-                print("페이로드에 'sub' 필드가 없습니다")
                 raise credentials_exception
             
             # 사용자 조회
             user = AuthUtils.get_user_by_id(db, user_id)
             if user is None:
-                print(f"사용자 ID '{user_id}'를 찾을 수 없습니다")
                 raise credentials_exception
             
             return user.to_dict()
         except JWTError as e:
-            print(f"JWT 오류: {str(e)}")
             raise credentials_exception
     
     @staticmethod
@@ -73,9 +67,6 @@ class LoginUtils:
             expire = datetime.utcnow() + timedelta(minutes=15)
         
         to_encode.update({"exp": expire})
-        
-        # 디버깅을 위한 로그 추가
-        print(f"토큰 페이로드: {to_encode}")
         
         # 토큰 생성
         encoded_jwt = jwt.encode(to_encode, JWT_SECRET_KEY, algorithm=ALGORITHM)

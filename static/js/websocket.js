@@ -395,8 +395,11 @@ class ChatWebSocketManager {
                 onError
             } = this.messageCallbacks;
             
+            logger.info('채팅 메시지 수신:', data.type);
+            
             switch (data.type) {
                 case 'assistant':
+                    logger.info('어시스턴트 메시지:', data.streaming ? '스트리밍' : '전체');
                     if (data.streaming && typeof onAssistantMessage === 'function') {
                         onAssistantMessage(data.content, data.model);
                     } else if (data.isFullResponse && typeof onMessageComplete === 'function') {
@@ -405,12 +408,14 @@ class ChatWebSocketManager {
                     break;
                     
                 case 'message_complete':
+                    logger.info('메시지 처리 완료');
                     // 메시지 처리 완료 신호 처리
                     this.isProcessing = false;
                     
                     // 세션 ID 저장 (있는 경우)
                     if (data.data && data.data.session_id) {
                         this.currentSessionId = data.data.session_id;
+                        logger.info('세션 ID 업데이트:', this.currentSessionId);
                     }
                     
                     if (typeof onMessageComplete === 'function') {
@@ -419,6 +424,7 @@ class ChatWebSocketManager {
                     break;
                     
                 case 'processing':
+                    logger.info('메시지 처리 중');
                     // 메시지 처리 중 신호
                     if (typeof onProcessing === 'function') {
                         onProcessing(data);
@@ -443,9 +449,12 @@ class ChatWebSocketManager {
                     
                 default:
                     logger.warn('알 수 없는 메시지 유형:', data.type, data);
+                    // 알 수 없는 메시지 유형이지만 처리 완료로 간주
+                    this.isProcessing = false;
             }
         } catch (error) {
             logger.error('메시지 처리 오류:', error);
+            this.isProcessing = false;
         }
     }
     
@@ -540,14 +549,51 @@ class CrawlWebSocketManager {
         try {
             const { onStatusUpdate, onError } = this.callbacks;
             
-            // 상태 업데이트 콜백 호출
-            if (typeof onStatusUpdate === 'function') {
-                onStatusUpdate(data);
-            }
+            logger.info('크롤링 메시지 수신:', data);
             
-            // 오류 처리
-            if (data.type === 'error' && typeof onError === 'function') {
-                onError(data);
+            // 메시지 타입에 따라 처리
+            switch (data.type) {
+                case 'status_update':
+                    logger.info('크롤링 상태 업데이트:', data.status);
+                    if (typeof onStatusUpdate === 'function') {
+                        onStatusUpdate(data);
+                    }
+                    break;
+                    
+                case 'new_crawl_item':
+                    logger.info('새 크롤링 항목 수신:', data.item?.title || '제목 없음');
+                    if (typeof onStatusUpdate === 'function') {
+                        onStatusUpdate(data);
+                    }
+                    break;
+                    
+                case 'crawl_results':
+                    logger.info('크롤링 결과 수신:', data.count || 0, '개 항목');
+                    if (typeof onStatusUpdate === 'function') {
+                        onStatusUpdate(data);
+                    }
+                    break;
+                    
+                case 'connection_established':
+                    logger.info('크롤링 서버 연결 설정됨');
+                    if (typeof onStatusUpdate === 'function') {
+                        onStatusUpdate(data);
+                    }
+                    break;
+                    
+                case 'error':
+                    logger.error('크롤링 오류:', data.message || data.error);
+                    if (typeof onError === 'function') {
+                        onError(data);
+                    }
+                    break;
+                    
+                default:
+                    logger.warn('알 수 없는 크롤링 메시지 타입:', data.type);
+                    // 기본 상태 업데이트 콜백 호출
+                    if (typeof onStatusUpdate === 'function') {
+                        onStatusUpdate(data);
+                    }
             }
         } catch (error) {
             logger.error('크롤링 메시지 처리 오류:', error);
@@ -602,14 +648,44 @@ class AgentWebSocketManager {
         try {
             const { onStatusUpdate, onError } = this.callbacks;
             
-            // 상태 업데이트 콜백 호출
-            if (typeof onStatusUpdate === 'function') {
-                onStatusUpdate(data);
-            }
+            logger.info('에이전트 메시지 수신:', data);
             
-            // 오류 처리
-            if (data.type === 'error' && typeof onError === 'function') {
-                onError(data);
+            // 메시지 타입에 따라 처리
+            switch (data.type) {
+                case 'status_update':
+                    logger.info('에이전트 상태 업데이트:', data.status);
+                    if (typeof onStatusUpdate === 'function') {
+                        onStatusUpdate(data);
+                    }
+                    break;
+                    
+                case 'error':
+                    logger.error('에이전트 오류:', data.message || data.error);
+                    if (typeof onError === 'function') {
+                        onError(data);
+                    }
+                    break;
+                    
+                case 'connection_established':
+                    logger.info('에이전트 연결 설정됨');
+                    break;
+                    
+                case 'agent_response':
+                    logger.info('에이전트 응답 수신:', data.message);
+                    // 에이전트 응답 처리 로직
+                    break;
+                    
+                case 'agent_action':
+                    logger.info('에이전트 액션 실행:', data.action);
+                    // 에이전트 액션 처리 로직
+                    break;
+                    
+                default:
+                    logger.warn('알 수 없는 에이전트 메시지 타입:', data.type);
+                    // 기본 상태 업데이트 콜백 호출
+                    if (typeof onStatusUpdate === 'function') {
+                        onStatusUpdate(data);
+                    }
             }
         } catch (error) {
             logger.error('에이전트 메시지 처리 오류:', error);

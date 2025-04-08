@@ -9,7 +9,7 @@ class Logger {
         this.enabled = enabled;
         this.logHistory = [];
         this.maxHistoryLength = 100;
-        this.logLevel = 'debug'; // debug, info, warn, error
+        this.logLevel = 'info'; // debug에서 info로 변경
         
         // Browser console color settings
         this.styles = {
@@ -265,36 +265,19 @@ class Logger {
     }
 
     /**
-     * Export log history
+     * Get log history
      * @returns {Array} Log history
      */
     getLogHistory() {
-        return [...this.logHistory];
+        return this.logHistory;
     }
-
+    
     /**
      * Clear log history
      */
     clearLogHistory() {
         this.logHistory = [];
-        this.debug('Log history cleared');
-    }
-
-    /**
-     * Download log history
-     * @param {string} filename - File name
-     */
-    downloadLogHistory(filename = 'log_history.json') {
-        const blob = new Blob([JSON.stringify(this.logHistory, null, 2)], { type: 'application/json' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        
-        a.href = url;
-        a.download = filename;
-        a.click();
-        
-        setTimeout(() => URL.revokeObjectURL(url), 100);
-        this.info(`Log history downloaded as ${filename}`);
+        this.info('Log history cleared');
     }
 }
 
