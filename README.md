@@ -367,5 +367,5 @@ This project is distributed under the MIT license. See the `LICENSE` file for de
 
 <div align="center">
   <img src="https://img.shields.io/badge/Made%20with%20%E2%9D%A4%EF%B8%8F%20by-EnzoMH-brightgreen" alt="Made with love by EnzoMH">
-  <p>© 2023 EnzoMH. All Rights Reserved.</p>
+  <p>© 2025 EnzoMH. All Rights Reserved.</p>
 </div> 
