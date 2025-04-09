@@ -293,21 +293,6 @@ The application runs at `http://localhost:8000`.
 <details>
 <summary><b>AI 에이전트 크롤링 (AI Agent Crawling)</b></summary>
 
-**[KR]**
-1. 크롤링 페이지에서 'AI 에이전트 크롤링' 탭 선택
-2. 검색 키워드 입력
-3. 필요에 따라 '강제 AI 에이전트 모드' 옵션 설정
-4. 'AI 에이전트 크롤링 시작' 버튼 클릭
-5. 에이전트 진행 상황 모니터링
-
-**[EN]**
-1. Select the 'AI Agent Crawling' tab on the crawling page
-2. Enter search keywords
-3. Set the 'Force AI Agent Mode' option if needed
-4. Click the 'Start AI Agent Crawling' button
-5. Monitor agent progress
-</details>
-
 ### 📊 크롤링 결과 활용하기 (Utilizing Crawling Results)
 
 **[KR]**
