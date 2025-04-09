@@ -784,6 +784,7 @@ class G2BCrawlerTest:
             # 행 타입 확인 (CSS 클래스 또는 태그명으로)
             row_tag = row.tag_name.lower()
             row_class = row.get_attribute('class') or ''
+            row_id = row.get_attribute('id') or ''
             
             # 테이블 행인 경우
             if row_tag == 'tr':
@@ -797,70 +798,118 @@ class G2BCrawlerTest:
                 
                 # 제목과 링크 추출
                 try:
-                    # 제목 셀 (보통 2번 또는 3번 셀)
-                    title_cell_index = 2  # 기본 인덱스
-                    
-                    # 데이터 구조를 확인하고 인덱스 조정
+                    # 제목 셀 (보통 6번 또는 공고명 열)
+                    title_cell = None
                     for i, cell in enumerate(cells):
-                        if '공고명' in cell.text or '공고제목' in cell.text:
-                            title_cell_index = i
+                        # 공고명 헤더를 가진 셀 확인
+                        header_id = cell.get_attribute('headers')
+                        aria_label = cell.get_attribute('aria-label')
+                        cell_text = cell.text.strip()
+                        
+                        # 공고명 관련 속성 확인
+                        if (header_id and 'column21' in header_id) or \
+                           (aria_label and '공고명' in aria_label) or \
+                           cell.get_attribute('data-column-name') == '공고명':
+                            title_cell = cell
                             break
                     
-                    # 제목 셀 확인
-                    title_cell = cells[min(title_cell_index, len(cells)-1)]
+                    # 제목 셀이 없으면 인덱스 기반 추정
+                    if not title_cell and len(cells) >= 6:
+                        title_cell = cells[5]  # 일반적으로 공고명은 6번째 셀 (인덱스 5)
                     
-                    # 제목 셀에서 링크 요소 찾기
-                    link = title_cell.find_element(By.TAG_NAME, "a")
-                    item_data['title'] = link.text.strip()
-                    item_data['url'] = link.get_attribute('href') or ''
-                    
-                    # 상세 페이지 URL이 없는 경우, onClick 속성 확인
-                    if not item_data['url'] or item_data['url'] == '#' or 'javascript:' in item_data['url']:
-                        onclick = link.get_attribute('onclick')
-                        if onclick:
-                            item_data['detail_url'] = onclick
+                    if title_cell:
+                        # 셀 내부의 링크 요소 찾기
+                        try:
+                            link = title_cell.find_element(By.TAG_NAME, "a")
+                            link_text = link.text.strip()
+                            
+                            # 공고명인지 확인 (일반용역, 숫자만 있는 경우 등은 제외)
+                            if link_text and not link_text.isdigit() and link_text not in ['일반용역', '내자', '등록공고', '입찰공고', '공고등록']:
+                                item_data['title'] = link_text
+                                item_data['url'] = link.get_attribute('href') or ''
+                                
+                                # 상세 페이지 URL이 없는 경우, onClick 속성 확인
+                                onclick = link.get_attribute('onclick')
+                                if onclick:
+                                    item_data['detail_url'] = onclick
+                                elif item_data['url'] and item_data['url'] != '#':
+                                    item_data['detail_url'] = item_data['url']
+                                
+                                logger.info(f"제목 추출: {item_data['title']}")
+                            else:
+                                logger.warning(f"유효하지 않은 공고명: {link_text} (건너뜀)")
+                                return None
+                        except NoSuchElementException:
+                            # 링크가 없는 경우 셀 텍스트 직접 사용
+                            cell_text = title_cell.text.strip()
+                            if cell_text and not cell_text.isdigit() and cell_text not in ['일반용역', '내자', '등록공고', '입찰공고', '공고등록']:
+                                item_data['title'] = cell_text
+                                logger.info(f"제목 텍스트 추출: {item_data['title']}")
+                            else:
+                                logger.warning(f"유효하지 않은 공고명 텍스트: {cell_text} (건너뜀)")
+                                return None
                     else:
-                        item_data['detail_url'] = item_data['url']
-                    
-                    logger.info(f"제목 추출: {item_data['title']}")
-                    
+                        logger.warning(f"행 {index}에서 제목 셀을 찾을 수 없음")
+                        return None
+                        
                 except Exception as e:
                     logger.warning(f"제목 추출 실패: {str(e)}")
+                    return None
                 
                 # 입찰 번호 추출
                 try:
-                    bid_number_cell = cells[1]  # 일반적으로 두 번째 셀
-                    item_data['bid_number'] = bid_number_cell.text.strip()
+                    for i, cell in enumerate(cells):
+                        header_id = cell.get_attribute('headers')
+                        aria_label = cell.get_attribute('aria-label')
+                        if (header_id and 'column7' in header_id) or \
+                           (aria_label and '입찰공고번호' in aria_label) or \
+                           cell.get_attribute('data-column-name') == '입찰공고번호':
+                            item_data['bid_number'] = cell.text.strip()
+                            break
+                    
+                    if not item_data['bid_number'] and len(cells) >= 2:
+                        item_data['bid_number'] = cells[1].text.strip()  # 일반적으로 두 번째 셀
+                    
                     logger.info(f"입찰 번호 추출: {item_data['bid_number']}")
                 except Exception as e:
                     logger.warning(f"입찰 번호 추출 실패: {str(e)}")
                 
                 # 부서명 추출
                 try:
-                    dept_cell = cells[0]  # 일반적으로 첫 번째 셀
-                    item_data['department'] = dept_cell.text.strip()
+                    for i, cell in enumerate(cells):
+                        header_id = cell.get_attribute('headers')
+                        aria_label = cell.get_attribute('aria-label')
+                        if (header_id and 'column1' in header_id) or \
+                           (aria_label and '부서명' in aria_label) or \
+                           cell.get_attribute('data-column-name') == '부서명':
+                            item_data['department'] = cell.text.strip()
+                            break
+                    
+                    if not item_data['department'] and len(cells) >= 1:
+                        item_data['department'] = cells[0].text.strip()  # 일반적으로 첫 번째 셀
+                    
                     logger.info(f"부서명 추출: {item_data['department']}")
                 except Exception as e:
                     logger.warning(f"부서명 추출 실패: {str(e)}")
                 
                 # 마감일시 추출
                 try:
-                    deadline_cell_index = 4  # 일반적으로 다섯 번째 셀
-                    
-                    # 데이터 구조 확인하고 인덱스 조정
                     for i, cell in enumerate(cells):
-                        if '마감일시' in cell.text:
-                            deadline_cell_index = i
+                        header_id = cell.get_attribute('headers')
+                        aria_label = cell.get_attribute('aria-label')
+                        if (header_id and 'column16' in header_id) or \
+                           (aria_label and '마감일시' in aria_label) or \
+                           cell.get_attribute('data-column-name') == '마감일시':
+                            item_data['deadline'] = cell.text.strip()
                             break
                     
-                    if deadline_cell_index < len(cells):
-                        deadline_cell = cells[deadline_cell_index]
-                        deadline_text = deadline_cell.text.strip()
-                        item_data['deadline'] = deadline_text
-                        
-                        logger.info(f"마감일시 텍스트: {deadline_text}")
-                        
-                        # 마감일시 문자열 형식 변환 시도
+                    if not item_data['deadline'] and len(cells) >= 5:
+                        item_data['deadline'] = cells[4].text.strip()  # 일반적으로 다섯 번째 셀
+                    
+                    logger.info(f"마감일시 텍스트: {item_data['deadline']}")
+                    
+                    # 마감일시 문자열 형식 변환 시도
+                    if item_data['deadline']:
                         try:
                             # 여러 날짜 형식 처리
                             date_formats = [
@@ -873,7 +922,7 @@ class G2BCrawlerTest:
                             deadline_date = None
                             for fmt in date_formats:
                                 try:
-                                    deadline_date = datetime.strptime(deadline_text, fmt)
+                                    deadline_date = datetime.strptime(item_data['deadline'], fmt)
                                     break
                                 except ValueError:
                                     continue
@@ -891,7 +940,7 @@ class G2BCrawlerTest:
                                 else:
                                     logger.info(f"입찰 {item_data['bid_number']}의 마감일시가 7일보다 더 남았습니다. (마감일: {deadline_date.strftime('%Y-%m-%d')})")
                             else:
-                                logger.warning(f"마감일시 '{deadline_text}' 형식을 파싱할 수 없습니다.")
+                                logger.warning(f"마감일시 '{item_data['deadline']}' 형식을 파싱할 수 없습니다.")
                                 
                         except Exception as e:
                             logger.warning(f"마감일시 파싱 실패: {str(e)}")
@@ -899,7 +948,7 @@ class G2BCrawlerTest:
                     logger.warning(f"마감일시 추출 실패: {str(e)}")
             
             # 그리드 행/셀인 경우
-            elif 'w2grid_row' in row_class or 'gridBodyDefault' in row_class or 'cell' in row.get_attribute('id', ''):
+            elif 'w2grid_row' in row_class or 'gridBodyDefault' in row_class or 'cell' in row_id:
                 logger.info(f"그리드 형식 데이터 추출 (인덱스: {index})")
                 
                 try:
@@ -908,177 +957,203 @@ class G2BCrawlerTest:
                     
                     # 셀 ID인 경우 ('_cell_숫자_숫자' 패턴)
                     if '_cell_' in row_id:
-                        # 직접 셀을 처리
-                        item_data['title'] = row.text.strip()
-                        onclick = row.get_attribute('onclick')
-                        if onclick:
-                            item_data['detail_url'] = onclick
-                        logger.info(f"셀 ID 기반 데이터 추출: {item_data['title']}")
-                        
-                        # 행 번호와 열 번호 추출 시도
-                        try:
-                            id_parts = row_id.split('_cell_')
-                            if len(id_parts) > 1:
-                                row_col = id_parts[1].split('_')
-                                if len(row_col) > 1:
-                                    row_num, col_num = row_col
+                        # 직접 공고명 셀 접근 (열 인덱스 6 - 공고명)
+                        parts = row_id.split('_cell_')
+                        if len(parts) > 1:
+                            row_col = parts[1].split('_')
+                            if len(row_col) > 1:
+                                row_num = row_col[0]
+                                
+                                # 공고명은 일반적으로 6번 열 (인덱스)
+                                title_cell_id = f"{parts[0]}_cell_{row_num}_6"
+                                
+                                try:
+                                    # 공고명 셀 찾기
+                                    title_cell = self.driver.find_element(By.ID, title_cell_id)
                                     
-                                    # 다른 셀 찾기 시도
-                                    base_id = id_parts[0]
+                                    # 셀 텍스트 추출
+                                    title_text = title_cell.text.strip()
                                     
+                                    # 유효한 공고명인지 확인
+                                    if title_text and not title_text.isdigit() and title_text not in ['일반용역', '내자', '등록공고', '입찰공고', '공고등록']:
+                                        item_data['title'] = title_text
+                                        
+                                        # 링크 정보 추출
+                                        try:
+                                            link = title_cell.find_element(By.TAG_NAME, "a")
+                                            onclick = link.get_attribute('onclick')
+                                            if onclick:
+                                                item_data['detail_url'] = onclick
+                                                logger.info(f"온클릭 이벤트 추출: {onclick[:50]}...")
+                                        except NoSuchElementException:
+                                            # 링크가 없을 수도 있음
+                                            pass
+                                        
+                                        logger.info(f"셀 ID 기반 데이터 추출: {item_data['title']}")
+                                    else:
+                                        logger.warning(f"유효하지 않은 공고명: {title_text} (건너뜀)")
+                                        return None
+                                except NoSuchElementException:
+                                    logger.warning(f"공고명 셀을 찾을 수 없음: {title_cell_id}")
+                                    return None
+                                    
+                                # 다른 셀에서 추가 정보 추출
+                                try:
                                     # 입찰 번호 (일반적으로 1번 열)
-                                    try:
-                                        bid_cell = self.driver.find_element(By.ID, f"{base_id}_cell_{row_num}_1")
-                                        item_data['bid_number'] = bid_cell.text.strip()
-                                    except:
-                                        pass
+                                    bid_cell_id = f"{parts[0]}_cell_{row_num}_1"
+                                    bid_cell = self.driver.find_element(By.ID, bid_cell_id)
+                                    item_data['bid_number'] = bid_cell.text.strip()
+                                except:
+                                    pass
+                                
+                                # 부서명 (일반적으로 0번 열)
+                                try:
+                                    dept_cell_id = f"{parts[0]}_cell_{row_num}_0"
+                                    dept_cell = self.driver.find_element(By.ID, dept_cell_id)
+                                    item_data['department'] = dept_cell.text.strip()
+                                except:
+                                    pass
+                                
+                                # 마감일 (일반적으로 4번 열)
+                                try:
+                                    deadline_cell_id = f"{parts[0]}_cell_{row_num}_4"
+                                    deadline_cell = self.driver.find_element(By.ID, deadline_cell_id)
+                                    deadline_text = deadline_cell.text.strip()
+                                    item_data['deadline'] = deadline_text
                                     
-                                    # 부서명 (일반적으로 0번 열)
-                                    try:
-                                        dept_cell = self.driver.find_element(By.ID, f"{base_id}_cell_{row_num}_0")
-                                        item_data['department'] = dept_cell.text.strip()
-                                    except:
-                                        pass
+                                    # 마감일 확인 로직은 테이블 행과 동일
+                                    # 여러 날짜 형식 처리
+                                    date_formats = [
+                                        "%Y/%m/%d", "%Y-%m-%d", 
+                                        "%Y/%m/%d %H:%M:%S", "%Y-%m-%d %H:%M:%S",
+                                        "%Y/%m/%d %H:%M", "%Y-%m-%d %H:%M",
+                                        "%Y년 %m월 %d일", "%Y년%m월%d일"
+                                    ]
                                     
-                                    # 마감일 (일반적으로 4번 열)
-                                    try:
-                                        deadline_cell = self.driver.find_element(By.ID, f"{base_id}_cell_{row_num}_4")
-                                        deadline_text = deadline_cell.text.strip()
-                                        item_data['deadline'] = deadline_text
-                                        
-                                        # 마감일 확인 로직은 테이블 행과 동일
-                                        # 여러 날짜 형식 처리
-                                        date_formats = [
-                                            "%Y/%m/%d", "%Y-%m-%d", 
-                                            "%Y/%m/%d %H:%M:%S", "%Y-%m-%d %H:%M:%S",
-                                            "%Y/%m/%d %H:%M", "%Y-%m-%d %H:%M",
-                                            "%Y년 %m월 %d일", "%Y년%m월%d일"
-                                        ]
-                                        
-                                        deadline_date = None
-                                        for fmt in date_formats:
-                                            try:
-                                                deadline_date = datetime.strptime(deadline_text, fmt)
-                                                break
-                                            except ValueError:
-                                                continue
-                                        
-                                        if deadline_date:
-                                            days_difference = (deadline_date - current_date).days
-                                            item_data['is_within_7days'] = days_difference <= 7
-                                    except:
-                                        pass
-                        except Exception as e:
-                            logger.warning(f"셀 ID에서 행/열 정보 추출 실패: {str(e)}")
+                                    deadline_date = None
+                                    for fmt in date_formats:
+                                        try:
+                                            deadline_date = datetime.strptime(deadline_text, fmt)
+                                            break
+                                        except ValueError:
+                                            continue
+                                    
+                                    if deadline_date:
+                                        days_difference = (deadline_date - current_date).days
+                                        item_data['is_within_7days'] = days_difference <= 7
+                                except:
+                                    pass
+                        else:
+                            logger.warning(f"셀 ID에서 행/열 정보를 추출할 수 없음: {row_id}")
+                            return None
                     
                     # 일반 그리드 행인 경우
                     else:
-                        # 셀 요소들 찾기
-                        cells = row.find_elements(By.CSS_SELECTOR, ".w2grid_cell, .gridCellDefault")
+                        # 공고명 셀 직접 찾기
+                        title_cell = None
+                        
+                        # 1. 속성으로 공고명 셀 찾기
+                        cells = row.find_elements(By.CSS_SELECTOR, "[data-column-name='공고명'], [aria-label*='공고명'], [headers*='column21']")
                         if cells:
-                            logger.info(f"그리드 행에서 {len(cells)}개 셀 발견")
+                            title_cell = cells[0]
+                        
+                        # 2. 셀 위치로 공고명 셀 찾기 (일반적으로 6번째 셀)
+                        if not title_cell:
+                            cells = row.find_elements(By.CSS_SELECTOR, ".w2grid_cell, .gridCellDefault")
+                            if len(cells) >= 6:
+                                title_cell = cells[5]  # 인덱스는 0부터 시작하므로 6번째 셀은 인덱스 5
+                        
+                        if title_cell:
+                            # 셀 텍스트 추출
+                            title_text = title_cell.text.strip()
                             
-                            # 제목 (일반적으로 2번 셀)
-                            if len(cells) > 2:
-                                item_data['title'] = cells[2].text.strip()
-                                
-                                # 클릭 이벤트 확인
-                                onclick = cells[2].get_attribute('onclick')
+                            # 링크 요소 찾기
+                            try:
+                                link = title_cell.find_element(By.TAG_NAME, "a")
+                                title_text = link.text.strip()
+                                onclick = link.get_attribute('onclick')
                                 if onclick:
                                     item_data['detail_url'] = onclick
+                            except NoSuchElementException:
+                                # 링크가 없을 수도 있음
+                                pass
                             
-                            # 입찰 번호 (일반적으로 1번 셀)
-                            if len(cells) > 1:
-                                item_data['bid_number'] = cells[1].text.strip()
+                            # 유효한 공고명인지 확인
+                            if title_text and not title_text.isdigit() and title_text not in ['일반용역', '내자', '등록공고', '입찰공고', '공고등록']:
+                                item_data['title'] = title_text
+                                logger.info(f"그리드 행에서 공고명 추출: {item_data['title']}")
+                            else:
+                                logger.warning(f"유효하지 않은 공고명: {title_text} (건너뜀)")
+                                return None
+                        else:
+                            logger.warning(f"그리드 행에서 공고명 셀을 찾을 수 없음: {row_id}")
+                            return None
                             
-                            # 부서명 (일반적으로 0번 셀)
-                            if len(cells) > 0:
-                                item_data['department'] = cells[0].text.strip()
+                        # 추가 정보 추출 (입찰번호, 부서명, 마감일)
+                        cells = row.find_elements(By.CSS_SELECTOR, ".w2grid_cell, .gridCellDefault")
+                        if len(cells) >= 2:
+                            item_data['bid_number'] = cells[1].text.strip()
+                        if len(cells) >= 1:
+                            item_data['department'] = cells[0].text.strip()
+                        if len(cells) >= 5:
+                            deadline_text = cells[4].text.strip()
+                            item_data['deadline'] = deadline_text
                             
-                            # 마감일 (일반적으로 4번 셀)
-                            if len(cells) > 4:
-                                deadline_text = cells[4].text.strip()
-                                item_data['deadline'] = deadline_text
-                                
-                                # 마감일 확인 로직은 테이블 행과 동일
-                                # 여러 날짜 형식 처리
-                                date_formats = [
-                                    "%Y/%m/%d", "%Y-%m-%d", 
-                                    "%Y/%m/%d %H:%M:%S", "%Y-%m-%d %H:%M:%S",
-                                    "%Y/%m/%d %H:%M", "%Y-%m-%d %H:%M",
-                                    "%Y년 %m월 %d일", "%Y년%m월%d일"
-                                ]
-                                
-                                deadline_date = None
-                                for fmt in date_formats:
-                                    try:
-                                        deadline_date = datetime.strptime(deadline_text, fmt)
-                                        break
-                                    except ValueError:
-                                        continue
-                                
-                                if deadline_date:
-                                    days_difference = (deadline_date - current_date).days
-                                    item_data['is_within_7days'] = days_difference <= 7
+                            # 마감일 확인 로직
+                            date_formats = [
+                                "%Y/%m/%d", "%Y-%m-%d", 
+                                "%Y/%m/%d %H:%M:%S", "%Y-%m-%d %H:%M:%S",
+                                "%Y/%m/%d %H:%M", "%Y-%m-%d %H:%M",
+                                "%Y년 %m월 %d일", "%Y년%m월%d일"
+                            ]
+                            
+                            deadline_date = None
+                            for fmt in date_formats:
+                                try:
+                                    deadline_date = datetime.strptime(deadline_text, fmt)
+                                    break
+                                except ValueError:
+                                    continue
+                            
+                            if deadline_date:
+                                days_difference = (deadline_date - current_date).days
+                                item_data['is_within_7days'] = days_difference <= 7
                 except Exception as e:
                     logger.warning(f"그리드 행 데이터 추출 실패: {str(e)}")
+                    logger.debug(traceback.format_exc())
+                    return None
             
             # 링크 요소인 경우
             elif row_tag == 'a':
                 logger.info(f"링크 형식 데이터 추출 (인덱스: {index})")
                 
-                item_data['title'] = row.text.strip()
-                item_data['url'] = row.get_attribute('href') or ''
+                # 텍스트 추출
+                title_text = row.text.strip()
                 
-                # 상세 페이지 URL이 없는 경우
-                if not item_data['url'] or item_data['url'] == '#' or 'javascript:' in item_data['url']:
-                    onclick = row.get_attribute('onclick')
-                    if onclick:
-                        item_data['detail_url'] = onclick
+                # 유효한 공고명인지 확인
+                if title_text and not title_text.isdigit() and title_text not in ['일반용역', '내자', '등록공고', '입찰공고', '공고등록']:
+                    item_data['title'] = title_text
+                    item_data['url'] = row.get_attribute('href') or ''
+                    
+                    # 상세 페이지 URL이 없는 경우
+                    if not item_data['url'] or item_data['url'] == '#' or 'javascript:' in item_data['url']:
+                        onclick = row.get_attribute('onclick')
+                        if onclick:
+                            item_data['detail_url'] = onclick
+                    else:
+                        item_data['detail_url'] = item_data['url']
+                    
+                    # 링크 요소에는 추가 데이터가 없을 수 있음
+                    item_data['bid_number'] = f"Link{index}"  # 임시 번호
+                    
+                    logger.info(f"링크 형식에서 공고명 추출: {item_data['title']}")
                 else:
-                    item_data['detail_url'] = item_data['url']
-                
-                # 링크 요소에는 추가 데이터가 없을 수 있음
-                item_data['bid_number'] = f"Link{index}"  # 임시 번호
-                
-                # 부모 요소에서 마감일 등 추가 정보 찾기 시도
-                try:
-                    parent = row.find_element(By.XPATH, "./..")
-                    
-                    # 부모의 다른 자식 요소 확인
-                    siblings = parent.find_elements(By.XPATH, "./*")
-                    
-                    for sibling in siblings:
-                        text = sibling.text.strip()
-                        
-                        # 마감일 포함 여부 확인
-                        if '마감' in text and ('/' in text or '-' in text):
-                            item_data['deadline'] = text
-                            
-                            # 마감일 확인 로직은 테이블 행과 동일
-                            # 여러 날짜 형식 추출 시도
-                            date_pattern = r'(\d{4}[/-]\d{1,2}[/-]\d{1,2})'
-                            date_matches = re.search(date_pattern, text)
-                            
-                            if date_matches:
-                                date_str = date_matches.group(1)
-                                try:
-                                    deadline_date = datetime.strptime(date_str, "%Y/%m/%d")
-                                except ValueError:
-                                    try:
-                                        deadline_date = datetime.strptime(date_str, "%Y-%m-%d")
-                                    except:
-                                        deadline_date = None
-                                
-                                if deadline_date:
-                                    days_difference = (deadline_date - current_date).days
-                                    item_data['is_within_7days'] = days_difference <= 7
-                except Exception as e:
-                    logger.warning(f"링크의 부모 요소에서 추가 정보 추출 실패: {str(e)}")
+                    logger.warning(f"유효하지 않은 공고명: {title_text} (건너뜀)")
+                    return None
             
             # 유효한 데이터인지 확인
             if not item_data['title']:
-                logger.warning(f"행 {index}에서 제목을 추출할 수 없음")
+                logger.warning(f"행 {index}에서 공고명을 추출할 수 없음")
                 return None
             
             # JSON 직렬화를 위해 WebElement 객체가 있는지 확인하고 제거
@@ -1171,6 +1246,25 @@ class G2BCrawlerTest:
                         cleaned_item[key] = str(value)
                     else:
                         cleaned_item[key] = value
+                
+                # prompt_result가 있으면 JSON으로 파싱 시도
+                if 'prompt_result' in cleaned_item:
+                    try:
+                        # Gemini 응답이 이미 JSON 형태인지 확인
+                        if cleaned_item['prompt_result'].strip().startswith('{') and cleaned_item['prompt_result'].strip().endswith('}'):
+                            try:
+                                # JSON 파싱 시도
+                                parsed_json = json.loads(cleaned_item['prompt_result'])
+                                cleaned_item['prompt_result_parsed'] = parsed_json
+                            except json.JSONDecodeError:
+                                # JSON 파싱 실패 시 원본 텍스트 유지하고 구조화된 데이터 추가
+                                cleaned_item['prompt_result_parsed'] = self._parse_gemini_text_to_json(cleaned_item['prompt_result'])
+                        else:
+                            # 텍스트 형태의 응답을 구조화된 JSON으로 변환
+                            cleaned_item['prompt_result_parsed'] = self._parse_gemini_text_to_json(cleaned_item['prompt_result'])
+                    except Exception as json_err:
+                        logger.warning(f"Gemini 응답 JSON 변환 실패: {str(json_err)}")
+                
                 cleaned_results.append(cleaned_item)
             
             # JSON 저장
@@ -1178,6 +1272,23 @@ class G2BCrawlerTest:
                 json.dump(cleaned_results, f, ensure_ascii=False, indent=2, default=filter_web_elements)
             
             logger.info(f"검색 결과 저장 완료: {search_result_file}")
+            
+            # Gemini 응답 파싱 결과만 별도 파일로 저장
+            gemini_results_file = RESULTS_DIR / f"gemini_results_{self.keyword}_{timestamp}.json"
+            gemini_results = []
+            
+            for item in cleaned_results:
+                if 'prompt_result_parsed' in item:
+                    gemini_results.append({
+                        'title': item.get('title', '제목 없음'),
+                        'bid_number': item.get('bid_number', '번호 없음'),
+                        'result': item['prompt_result_parsed']
+                    })
+            
+            with open(gemini_results_file, 'w', encoding='utf-8') as f:
+                json.dump(gemini_results, f, ensure_ascii=False, indent=2)
+            
+            logger.info(f"Gemini API 결과 저장 완료: {gemini_results_file}")
             
             logger.info("=== 나라장터 크롤링 테스트 완료 ===")
             return True
@@ -1189,6 +1300,108 @@ class G2BCrawlerTest:
         finally:
             # 리소스 정리
             await self.close()
+
+    def _parse_gemini_text_to_json(self, text):
+        """
+        Gemini API의 텍스트 응답을 구조화된 JSON으로 변환
+        
+        Args:
+            text: Gemini API의 응답 텍스트
+            
+        Returns:
+            구조화된 JSON 객체
+        """
+        try:
+            result = {}
+            
+            # 줄 단위로 분리
+            lines = text.strip().split('\n')
+            current_key = None
+            current_value = []
+            
+            for line in lines:
+                line = line.strip()
+                if not line:
+                    continue
+                    
+                # 숫자로 시작하는 줄은 새로운 항목으로 간주
+                if line[0].isdigit() and '. ' in line:
+                    # 이전 항목 저장
+                    if current_key and current_value:
+                        result[current_key] = '\n'.join(current_value).strip()
+                        current_value = []
+                    
+                    # 새 항목 파싱
+                    parts = line.split('. ', 1)
+                    if len(parts) == 2:
+                        key_value = parts[1].split(':', 1)
+                        if len(key_value) == 2:
+                            current_key = key_value[0].strip()
+                            value_part = key_value[1].strip()
+                            current_value.append(value_part)
+                        else:
+                            current_key = parts[1].strip()
+                else:
+                    # 값 계속 누적
+                    if current_key:
+                        current_value.append(line)
+            
+            # 마지막 항목 저장
+            if current_key and current_value:
+                result[current_key] = '\n'.join(current_value).strip()
+            
+            return result
+        except Exception as e:
+            logger.warning(f"Gemini 텍스트 파싱 실패: {str(e)}")
+            return {"raw_text": text}
+
+    def _js_extract_values(self):
+        """
+        JavaScript를 사용하여 입력 필드 값 추출
+        
+        Returns:
+            추출된 값들을 담은 딕셔너리
+        """
+        try:
+            # 중요 필드들의 값을 JavaScript로 직접 추출
+            important_fields = [
+                {"name": "공고종류", "field_title": "공고종류"},
+                {"name": "게시일시", "field_title": "게시일시"},
+                {"name": "입찰공고번호", "field_title": "입찰공고번호"},
+                {"name": "참조번호", "field_title": "참조번호"},
+                {"name": "공고명", "field_title": "공고명"},
+                {"name": "계약방법", "field_title": "계약방법"},
+                {"name": "입찰방식", "field_title": "입찰방식"},
+                {"name": "낙찰방법", "field_title": "낙찰방법"}
+            ]
+            
+            js_extracted_values = {}
+            
+            # 모든 input 필드에서 값 추출
+            for field in important_fields:
+                field_name = field["name"]
+                field_title = field["field_title"]
+                
+                js_script = f"""
+                var inputs = document.querySelectorAll('input[title="{field_title}"]');
+                if (inputs.length > 0) {{
+                    return inputs[0].value;
+                }}
+                return null;
+                """
+                
+                try:
+                    value = self.driver.execute_script(js_script)
+                    if value:
+                        js_extracted_values[field_name] = value
+                        logger.info(f"JavaScript로 추출한 {field_name}: {value}")
+                except Exception as js_err:
+                    logger.debug(f"{field_name} JavaScript 추출 실패: {str(js_err)}")
+            
+            return js_extracted_values
+        except Exception as e:
+            logger.warning(f"JavaScript 데이터 추출 실패: {str(e)}")
+            return {}
 
     async def process_detail_page(self, item):
         """
@@ -1321,6 +1534,18 @@ class G2BCrawlerTest:
                             # td 셀 처리
                             for j, cell in enumerate(td_cells):
                                 cell_key = f"td_{j+1}"
+                                
+                                # 셀 내 input 필드 확인 (동적으로 채워지는 값 처리)
+                                input_fields = cell.find_all('input')
+                                input_values = []
+                                for input_field in input_fields:
+                                    input_value = input_field.get('value', '')
+                                    input_title = input_field.get('title', '')
+                                    input_values.append({
+                                        'title': input_title,
+                                        'value': input_value
+                                    })
+                                
                                 # 셀 내 링크 추출
                                 links = cell.find_all('a')
                                 links_data = []
@@ -1333,8 +1558,14 @@ class G2BCrawlerTest:
                                     }
                                     links_data.append(link_data)
                                 
+                                # 기본 텍스트가 비어있고 input 값이 있으면 input 값 사용
+                                cell_text = cell.get_text(strip=True)
+                                if not cell_text and input_values:
+                                    cell_text = ' / '.join([iv['value'] for iv in input_values if iv['value']])
+                                
                                 cells_data[cell_key] = {
-                                    "text": cell.get_text(strip=True),
+                                    "text": cell_text,
+                                    "input_values": input_values,
                                     "links": links_data,
                                     "attributes": dict(cell.attrs)
                                 }
@@ -1344,6 +1575,23 @@ class G2BCrawlerTest:
                         detail_data["raw_tables"][caption_text] = rows_data
                     
                 logger.info(f"{len(detail_data['raw_tables'])}개의 원시 테이블 데이터 저장 완료")
+                
+                # 직접 Selenium을 사용하여 JavaScript로 채워진 input 필드 값 추출
+                js_extracted_values = self._js_extract_values()
+                
+                # 추출된 값 저장
+                if js_extracted_values:
+                    detail_data["js_extracted_values"] = js_extracted_values
+                    
+                    # 특정 필드들은 메인 데이터에도 추가
+                    if "계약방법" in js_extracted_values:
+                        detail_data["contract_method"] = js_extracted_values["계약방법"]
+                    if "입찰방식" in js_extracted_values:
+                        detail_data["bid_type"] = js_extracted_values["입찰방식"]
+                    if "입찰공고번호" in js_extracted_values and not detail_data["bid_number"]:
+                        detail_data["bid_number"] = js_extracted_values["입찰공고번호"]
+                    if "공고명" in js_extracted_values and js_extracted_values["공고명"]:
+                        detail_data["title"] = js_extracted_values["공고명"]
                 
                 # 원시 테이블 데이터를 텍스트로 변환하여 Gemini 모델에 전달
                 if detail_data["raw_tables"]:
@@ -1362,7 +1610,13 @@ class G2BCrawlerTest:
                                 if key.startswith('th_'):
                                     header_texts.append(cell["text"])
                                 elif key.startswith('td_'):
-                                    value_texts.append(cell["text"])
+                                    # 기본 텍스트 사용, 비어있으면 input_values 확인
+                                    cell_text = cell["text"]
+                                    if not cell_text and 'input_values' in cell:
+                                        input_values = [iv['value'] for iv in cell['input_values'] if iv['value']]
+                                        if input_values:
+                                            cell_text = ' / '.join(input_values)
+                                    value_texts.append(cell_text)
                             
                             # 행 정보 추가
                             if header_texts and value_texts:
@@ -1414,6 +1668,13 @@ JSON 형식이 아닌 일반 텍스트로 응답해주세요.
                     
                     combined_text = f"{table_text}\n\n{file_info}"
                     
+                    # JavaScript로 추출한 값 추가
+                    if "js_extracted_values" in detail_data:
+                        js_values_text = "\n[JavaScript로 추출한 값]\n"
+                        for key, value in detail_data["js_extracted_values"].items():
+                            js_values_text += f"{key}: {value}\n"
+                        combined_text += f"\n{js_values_text}"
+                    
                     # Gemini API 호출
                     try:
                         gemini_response = await extract_with_gemini_text(combined_text, prompt_template)
@@ -1425,6 +1686,9 @@ JSON 형식이 아닌 일반 텍스트로 응답해주세요.
                         else:
                             # 이미 문자열인 경우 그대로 저장
                             detail_data["prompt_result"] = str(gemini_response)
+                        
+                        # 텍스트 응답을 구조화된 데이터로 변환하여 저장
+                        detail_data["prompt_result_parsed"] = self._parse_gemini_text_to_json(detail_data["prompt_result"])
                         
                         logger.info("Gemini API를 통한 상세 정보 추출 완료")
                     except Exception as gemini_err:
@@ -1457,6 +1721,12 @@ JSON 형식이 아닌 일반 텍스트로 응답해주세요.
                                 if len(cells) >= 2:
                                     header = cells[0].get_text(strip=True)
                                     value = cells[1].get_text(strip=True)
+                                    
+                                    # 값이 비어있으면 input 필드 확인
+                                    if not value:
+                                        input_field = cells[1].find('input')
+                                        if input_field:
+                                            value = input_field.get('value', '')
                                     
                                     if any(keyword in header for keyword in ["수요기관", "공고기관"]):
                                         detail_data["organization"] = value
@@ -1835,223 +2105,6 @@ JSON 형식이 아닌 일반 텍스트로 응답해주세요.
         
         except Exception as e:
             logger.warning(f"팝업 처리 중 오류 (무시): {str(e)}")
-
-    async def _extract_detail_page_data(self, bid_number, bid_title):
-        """
-        상세 페이지에서 데이터 추출 (HTML 파서 중심)
-        
-        Args:
-            bid_number: 입찰 번호
-            bid_title: 입찰 제목
-            
-        Returns:
-            추출된 데이터
-        """
-        try:
-            logger.info(f"상세 페이지 데이터 추출 시작: {bid_number}")
-            
-            # HTML 소스 가져오기
-            html_source = self.driver.page_source
-            
-            # BeautifulSoup 파싱
-            soup = BeautifulSoup(html_source, 'html.parser')
-            
-            # 결과 데이터 초기화
-            detail_data = {
-                "bid_number": bid_number,
-                "title": bid_title,
-                "organization": None,
-                "division": None,
-                "contract_method": None,
-                "bid_type": None,
-                "estimated_price": None,
-                "qualification": None,
-                "description": None,
-                "raw_tables": {}  # 원시 테이블 데이터 저장
-            }
-            
-            # 모든 테이블과 tbody 요소 추출하여 저장
-            try:
-                all_tables = soup.find_all('table')
-                for i, table in enumerate(all_tables):
-                    # 테이블 캡션 또는 제목 찾기
-                    caption = table.find('caption')
-                    caption_text = caption.get_text(strip=True) if caption else f"테이블_{i+1}"
-                    
-                    # 테이블 내 tbody 요소 찾기
-                    tbody = table.find('tbody')
-                    if tbody:
-                        # tbody 내 모든 행과 셀을 추출하여 구조화된 데이터로 저장
-                        rows_data = []
-                        rows = tbody.find_all('tr')
-                        for row in rows:
-                            cells_data = {}
-                            th_cells = row.find_all('th')
-                            td_cells = row.find_all('td')
-                            
-                            # th 셀 처리
-                            for j, cell in enumerate(th_cells):
-                                header_key = f"th_{j+1}"
-                                cells_data[header_key] = {
-                                    "text": cell.get_text(strip=True),
-                                    "attributes": dict(cell.attrs)
-                                }
-                            
-                            # td 셀 처리
-                            for j, cell in enumerate(td_cells):
-                                cell_key = f"td_{j+1}"
-                                # 셀 내 링크 추출
-                                links = cell.find_all('a')
-                                links_data = []
-                                for link in links:
-                                    link_data = {
-                                        "text": link.get_text(strip=True),
-                                        "href": link.get('href', ''),
-                                        "onclick": link.get('onclick', ''),
-                                        "attributes": dict(link.attrs)
-                                    }
-                                    links_data.append(link_data)
-                                
-                                cells_data[cell_key] = {
-                                    "text": cell.get_text(strip=True),
-                                    "links": links_data,
-                                    "attributes": dict(cell.attrs)
-                                }
-                            
-                            rows_data.append(cells_data)
-                        
-                        detail_data["raw_tables"][caption_text] = rows_data
-                    
-                logger.info(f"{len(detail_data['raw_tables'])}개의 원시 테이블 데이터 저장 완료")
-                
-                # 원시 테이블 데이터를 텍스트로 변환하여 Gemini 모델에 전달
-                if detail_data["raw_tables"]:
-                    table_text = ""
-                    
-                    # 테이블 데이터를 텍스트로 변환
-                    for table_name, rows in detail_data["raw_tables"].items():
-                        table_text += f"[테이블: {table_name}]\n"
-                        
-                        for row_data in rows:
-                            header_texts = []
-                            value_texts = []
-                            
-                            # 헤더 텍스트 추출
-                            for key, cell in row_data.items():
-                                if key.startswith('th_'):
-                                    header_texts.append(cell["text"])
-                                elif key.startswith('td_'):
-                                    value_texts.append(cell["text"])
-                            
-                            # 행 정보 추가
-                            if header_texts and value_texts:
-                                for i, header in enumerate(header_texts):
-                                    if i < len(value_texts):
-                                        table_text += f"{header}: {value_texts[i]}\n"
-                            elif header_texts:
-                                table_text += f"{', '.join(header_texts)}\n"
-                            elif value_texts:
-                                table_text += f"{', '.join(value_texts)}\n"
-                        
-                        table_text += "\n"
-                    
-                    # 파일 첨부 섹션 찾기
-                    file_links = soup.select("a[href*='download'], a[href*='fileDown'], a.file")
-                    file_info = ""
-                    if file_links:
-                        file_info += "[파일첨부]\n"
-                        for link in file_links:
-                            file_name = link.get_text(strip=True) or link.get("title") or "첨부파일"
-                            file_info += f"- {file_name}\n"
-                    
-                    # Gemini 프롬프트 구성
-                    prompt_template = """
-입찰 상세 정보 추출 전문가로서, 다음 HTML 정보에서 중요 정보를 추출해주세요.
-
-다음은 입찰공고 상세페이지의 테이블 데이터와 전체 페이지 텍스트입니다:
-
-{content}
-
-다음 중요 정보를 확인하여 저장해주세요.(JSON 형식으로 응답 X)
-1. 게시일시 
-2. 입찰공고번호 
-3. 공고명 
-4. 입찰방식
-5. 낙찰방법
-6. 계약방법
-7. 계약구분
-8. 공동계약 및 구성방식(컨소시엄 여부)
-9. 실적제한 여부, 제한여부
-10. 가격과 관련된 모든정보(예가방법, 사업금액, 배정에산, 추정에산)
-11. 기관담당자정보(담당자 이름, 팩스번호, 전화번호)
-12. 연관정보(이건 링크임)
-13. 파일첨부
-
-위 형식대로 각 항목에 해당하는 정보를 추출해주세요. 정보가 없는 경우 "정보 없음"으로 표시해주세요.
-JSON 형식이 아닌 일반 텍스트로 응답해주세요.
-"""
-                    
-                    combined_text = f"{table_text}\n\n{file_info}"
-                    
-                    # Gemini API 호출
-                    try:
-                        gemini_response = await extract_with_gemini_text(combined_text, prompt_template)
-                        
-                        # Gemini 응답을 문자열로 변환하여 저장
-                        if isinstance(gemini_response, dict):
-                            # 딕셔너리인 경우 문자열로 변환
-                            detail_data["prompt_result"] = json.dumps(gemini_response, ensure_ascii=False)
-                        else:
-                            # 이미 문자열인 경우 그대로 저장
-                            detail_data["prompt_result"] = str(gemini_response)
-                        
-                        logger.info("Gemini API를 통한 상세 정보 추출 완료")
-                    except Exception as gemini_err:
-                        logger.error(f"Gemini API 호출 오류: {str(gemini_err)}")
-                
-            except Exception as raw_tables_err:
-                logger.warning(f"원시 테이블 데이터 추출 실패: {str(raw_tables_err)}")
-            
-            # 1. 주요 섹션별 데이터 추출 (추가 데이터 확보용)
-            section_names = ["공고일반", "입찰자격", "투찰제한", "제안요청정보", "협상에 의한 계약", "가격", 
-                           "기관담당자정보", "수요기관 담당자정보", "연관정보", "파일첨부"]
-            
-            # 1-1. 공고기관 정보 추출 (기관담당자정보 섹션)
-            try:
-                # 기관담당자정보 섹션 찾기
-                org_section = None
-                for heading in soup.find_all(['h3', 'h4', 'div', 'span', 'strong']):
-                    if "기관담당자" in heading.get_text() or "공고기관" in heading.get_text():
-                        org_section = heading.find_parent('div') or heading.find_parent('table') or heading.find_parent('section')
-                        break
-                
-                if org_section:
-                    # 테이블 내용 추출
-                    org_tables = org_section.find_all('table')
-                    if org_tables:
-                        for table in org_tables:
-                            rows = table.find_all('tr')
-                            for row in rows:
-                                cells = row.find_all(['th', 'td'])
-                                if len(cells) >= 2:
-                                    header = cells[0].get_text(strip=True)
-                                    value = cells[1].get_text(strip=True)
-                                    
-                                    if any(keyword in header for keyword in ["수요기관", "공고기관"]):
-                                        detail_data["organization"] = value
-                                    elif any(keyword in header for keyword in ["담당자", "담당부서"]):
-                                        detail_data["division"] = value
-            except Exception as org_err:
-                logger.warning(f"기관정보 추출 실패: {str(org_err)}")
-            
-            # 여기에 더 많은 섹션별 추출 로직이 있지만 Gemini API 결과가 있으면 충분함
-            
-            return detail_data
-            
-        except Exception as e:
-            logger.error(f"상세 페이지 데이터 추출 중 오류: {str(e)}")
-            logger.debug(traceback.format_exc())
-            return {}
 
     async def _process_search_results(self, search_items):
         """
